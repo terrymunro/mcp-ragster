@@ -1,0 +1,112 @@
+import httpx 
+import logging
+from typing import List, Dict, Any, Optional # Optional can be removed if methods always raise on failure
+from firecrawl import FirecrawlApp 
+
+if __package__:
+    from .config import settings
+    from .exceptions import FirecrawlError, PerplexityAPIError, JinaAPIError, APICallError
+else: 
+    import sys
+    from pathlib import Path
+    project_root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(project_root))
+    from ragster.config import settings
+    from ragster.exceptions import FirecrawlError, PerplexityAPIError, JinaAPIError, APICallError
+
+logger = logging.getLogger(__name__)
+
+class ExternalAPIClient:
+    def __init__(self, http_client: Optional[httpx.AsyncClient] = None):
+        logger.info("Attempting to initialize ExternalAPIClient.")
+        self.http_client = http_client
+        self.firecrawl_client: Optional[FirecrawlApp] = None
+        
+        # API key/URL presence for Firecrawl is guaranteed by config.py
+        try:
+            if settings.FIRECRAWL_API_KEY:
+                self.firecrawl_client = FirecrawlApp(api_key=settings.FIRECRAWL_API_KEY)
+                logger.info("Firecrawl client initialized with API key.")
+            elif settings.FIRECRAWL_API_URL: 
+                self.firecrawl_client = FirecrawlApp(api_key=None, base_url=settings.FIRECRAWL_API_URL)
+                logger.info(f"Firecrawl client initialized with base URL: {settings.FIRECRAWL_API_URL}")
+            # No 'else' needed as config.py would have raised error
+        except Exception as e: # Catch errors from FirecrawlApp constructor
+            logger.critical(f"Failed to initialize FirecrawlApp client: {e}", exc_info=True)
+            raise FirecrawlError(f"Failed to initialize FirecrawlApp client: {e}", underlying_error=e, status_code=500)
+
+    async def crawl_url_firecrawl(self, url: str) -> Dict[str, Any]: 
+        if not self.firecrawl_client: 
+            raise FirecrawlError("Firecrawl client not available. Initialization failed earlier.", status_code=500)
+        try:
+            logger.info(f"Crawling URL with Firecrawl: {url}")
+            crawl_result = self.firecrawl_client.crawl_url(url=url, params={'pageOptions': {'onlyMainContent': True, 'includeHtml': False}})
+            if not (crawl_result and isinstance(crawl_result, dict)):
+                raise FirecrawlError(f"Unexpected Firecrawl result format for {url}: {type(crawl_result)}")
+            
+            content_key_priority = ['markdown', 'content', 'data']
+            for key in content_key_priority:
+                if key in crawl_result and crawl_result[key]:
+                    return {"content": crawl_result[key], "source_url": url, "type": key}
+            raise FirecrawlError(f"Firecrawl result for {url} lacks expected content fields. Result: {str(crawl_result)[:200]}")
+        except Exception as e:
+            if isinstance(e, FirecrawlError): raise
+            raise FirecrawlError(f"Error crawling URL {url} with Firecrawl: {e}", underlying_error=e)
+
+    async def query_perplexity(self, topic: str) -> str: 
+        headers = {"Authorization": f"Bearer {settings.PERPLEXITY_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
+        payload = {"model": "llama-3-sonar-large-32k-online", "messages": [{"role": "system", "content": "Provide a concise summary."}, {"role": "user", "content": f"Summarize: {topic}"}], "max_tokens": 500}
+        try:
+            if self.http_client:
+                response = await self.http_client.post(settings.PERPLEXITY_CHAT_API_URL, json=payload, headers=headers)
+            else:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(settings.PERPLEXITY_CHAT_API_URL, json=payload, headers=headers)
+            
+            if response.status_code != 200:
+                raise APICallError("Perplexity", response.status_code, response.text[:500])
+            response_data = response.json()
+            choices = response_data.get("choices")
+            if choices and isinstance(choices, list) and len(choices) > 0 and choices[0].get("message"): # Check len(choices) > 0
+                content = choices[0]["message"].get("content")
+                if content and isinstance(content, str): return content.strip() # Ensure content is string
+            raise PerplexityAPIError(f"Perplexity response format unexpected or empty content: {str(response_data)[:200]}")
+        except httpx.HTTPStatusError as e:
+             raise APICallError("Perplexity", e.response.status_code, e.response.text[:200]) from e
+        except httpx.RequestError as e:
+            raise PerplexityAPIError(f"Network request to Perplexity failed: {e}", underlying_error=e)
+        except Exception as e:
+            if isinstance(e, (PerplexityAPIError, APICallError)): raise
+            raise PerplexityAPIError(f"Unexpected error querying Perplexity: {e}", underlying_error=e)
+
+    async def search_jina(self, topic: str, num_results: int = 5) -> List[Dict[str, Any]]:
+        headers = {"Authorization": f"Bearer {settings.JINA_API_KEY}", "Content-Type": "application/json", "X-With-Generated-Alt": "true"}
+        search_url = f"{settings.JINA_SEARCH_API_URL}?q={topic}&limit={num_results}"
+        try:
+            if self.http_client:
+                response = await self.http_client.get(search_url, headers=headers)
+            else:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.get(search_url, headers=headers)
+            
+            if response.status_code != 200:
+                raise APICallError("Jina", response.status_code, response.text[:500])
+            response_data = response.json()
+            data_source = response_data.get('data') if isinstance(response_data.get('data'), list) else response_data.get('results')
+            if isinstance(data_source, list):
+                return [{"url": i['url'], "title": i['title'], "snippet": i.get('snippet', i.get('description', ''))} 
+                        for i in data_source if i.get('url') and i.get('title')][:num_results]
+            raise JinaAPIError(f"Jina Search response format unexpected: {str(response_data)[:200]}")
+        except httpx.HTTPStatusError as e:
+            raise APICallError("Jina", e.response.status_code, e.response.text[:200]) from e
+        except httpx.RequestError as e:
+            raise JinaAPIError(f"Network request to Jina failed: {e}", underlying_error=e)
+        except Exception as e:
+            if isinstance(e, (JinaAPIError, APICallError)): raise
+            raise JinaAPIError(f"Unexpected error querying Jina: {e}", underlying_error=e)
+
+    async def close(self):
+        """Placeholder for any explicit cleanup if needed."""
+        # Firecrawl client doesn't have an explicit close method in the SDK from what's seen.
+        # httpx clients for Jina/Perplexity are created per-call.
+        logger.info("ExternalAPIClient close called (currently no specific resources to release).")
