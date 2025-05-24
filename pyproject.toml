@@ -2,7 +2,10 @@
 name = "mcp-ragster"
 version = "0.3.0"
 description = "Model Context Protocol (MCP) server for RAG using Jina, Firecrawl, Perplexity, Milvus, and Voyage AI with improved error handling."
-authors = [{ name = "Gemini", email = "gemini@google.com" }]
+authors = [
+    { name = "Gemini", email = "gemini@google.com" },
+    { name = "Claude", email = "noreply@anthropic.com" },
+]
 requires-python = ">=3.13, <3.14" 
 readme = "README.md"
 license = { text = "MIT" }
