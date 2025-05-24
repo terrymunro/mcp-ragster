@@ -1,153 +1,195 @@
-# Model Context Protocol (MCP) RAG Server (using mcp-sdk)
+# MCP Ragster
 
-This server provides a FastAPI-based implementation for a Model Context Protocol, built using the `modelcontextprotocol/python-sdk`.
-It is designed to enhance Retrieval Augmented Generation (RAG) pipelines by using external tools like Jina AI (for web search), Firecrawl (for web crawling), Perplexity AI (for summaries), Milvus (as a vector store), and Voyage AI (for embeddings) to gather and retrieve information about specified topics. API keys for these services are mandatory for the server to run.
+A Model Context Protocol (MCP) server that provides intelligent topic research and retrieval capabilities.
+Combines multiple AI services to gather, process, and search contextual information about any topic.
+
+## What It Does
+
+- **Research topics comprehensively**: Automatically gathers information from web search, AI summaries, and full content crawling
+- **Store and index content**: Creates a searchable knowledge base using vector embeddings
+- **Semantic search**: Find relevant information using natural language queries
 
 ## Features
 
-Built using the `mcp` Python SDK (`FastMCP`):
+- **`load_topic_context` tool**: Researches a topic by gathering information from Jina (web search), Perplexity (AI summaries), and Firecrawl (full content)
+- **`query_topic_context` tool**: Search the gathered information using semantic similarity
+- **Automatic content processing**: Handles embedding and storage of all gathered content
+- **Robust error handling**: Gracefully handles API failures and network issues
 
-- **`load_topic_context` tool**:
-  - Fetches relevant URLs and snippets for a topic using Jina AI.
-  - Indexes these snippets directly into Milvus using Voyage AI embeddings.
-  - Concurrently queries Perplexity AI for a summary and indexes it.
-  - Concurrently crawls Jina URLs using Firecrawl and indexes content.
-- **`query_topic_context` tool**:
-  - Accepts a query string and `top_k`.
-  - Embeds the query using Voyage AI.
-  - Searches the Milvus vector store for relevant text fragments.
-- **Lifespan Management**: Initializes and cleans up external service clients (Voyage AI, Milvus, etc.).
-- **Robust Error Handling**: Uses custom exceptions.
+## How It Works
 
-## Project Structure
+1. **Topic Loading**: Use `load_topic_context` with any topic to research and index information
+2. **Information Gathering**: Automatically searches the web, generates summaries, and crawls relevant content
+3. **Content Storage**: Embeds all content using Voyage AI and stores in Milvus vector database
+4. **Querying**: Use `query_topic_context` to search the indexed content with natural language queries
 
-```sh
-mcp_rag_server/
-├── pyproject.toml        # Project definition and dependencies for uv
-├── .env.example          # Example environment variables
-├── README.md             # This file
-└── src/
-├── init.py
-├── mcp_app.py        # Main MCP server application using FastMCP
-├── config.py         # Configuration loading
-├── models.py         # Pydantic models for API data structures
-├── exceptions.py     # Custom exception classes
-├── embedding_client.py # Handles text embedding via Voyage AI
-├── milvus_ops.py     # Milvus operations
-└── external_apis.py  # Clients for Jina, Firecrawl, Perplexity
+### Load Topic Process Flow
+
+```mermaid
+graph TD
+    A[User calls load_topic_context] --> B[Search topic with Jina AI]
+    B --> C[Get search results & URLs]
+    C --> D[Start concurrent operations]
+    
+    D --> E[Query Perplexity AI for summary]
+    D --> F[Crawl URLs with Firecrawl]
+    
+    E --> G[Embed Perplexity summary]
+    F --> H[Process crawled content]
+    H --> I[Embed crawled content]
+    
+    G --> J[Store in Milvus]
+    I --> J
+    C --> K[Embed Jina snippets]
+    K --> J
+    
+    J --> L[Return success response]
+    
+    style A fill:#e1f5fe
+    style L fill:#e8f5e8
+    style J fill:#fff3e0
 ```
 
 ## Prerequisites
 
-- Python 3.10 - 3.13
-- `uv` package manager installed (`pip install uv`)
-- Access to a running Milvus instance.
-- Access to a self-hosted Firecrawl instance or a Firecrawl API key.
-- API keys for Voyage AI, Perplexity AI, and Jina AI (these are mandatory).
+- **Python 3.13+**
+- **uv package manager** (`pip install uv`)
+- **Running Milvus instance** (local or cloud)
+- **Required API Keys**:
+  - `VOYAGEAI_API_KEY` - for embeddings
+  - `PERPLEXITY_API_KEY` - for AI summaries  
+  - `JINA_API_KEY` - for web search
+  - `FIRECRAWL_API_KEY` or `FIRECRAWL_API_URL` - for web crawling
 
-## Setup
-
-1. **Create Project Files:**
-   Create the files and directories as listed. Copy the content for each file.
-
-2. **Create a virtual environment and install dependencies:**
-
-   ```bash
-   cd path/to/mcp_rag_server
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   uv pip install "mcp[cli]>=0.2.0" # Installs the MCP SDK with CLI tools
-   uv pip install .               # Installs other dependencies from pyproject.toml
-   ```
-
-3. **Configure Environment Variables:**
-   Copy `.env.example` to `.env`. Edit `.env` with your actual API keys, Milvus details, etc. All API keys are mandatory. Ensure `EMBEDDING_DIMENSION` matches your `VOYAGEAI_MODEL_NAME`.
-
-## Running the Server
-
-You can run the server in development mode using the `mcp` CLI:
+## Installation
 
 ```bash
-mcp dev src/mcp_app.py
+# Setup environment
+uv sync
+
+# Configure API keys
+cp .env.example .env
+# Edit .env with your API keys
 ```
 
-This will typically start the server and provide an inspector interface.
+## Usage
 
-Alternatively, for direct execution (if you want to manage Uvicorn yourself or for production without the mcp dev wrapper, though mcp provides production deployment guidance):
+**Start the server:**
 
 ```bash
-python src/mcp_app.py
+mcp dev src/ragster/main.py
 ```
 
-This relies on the mcp_server.run() call within src/mcp_app.py.
+**Or run directly:**
 
-The server will expose its tools according to the Model Context Protocol. The exact endpoint (e.g., /mcp, /sse) depends on the transport configured or defaulted by the mcp SDK.
+```bash
+uv run src/ragster/main.py
+# or
+uv run start-mcp-server
+```
 
-## MCP Tools Exposed
+## MCP Tools
 
-1. `load_topic_context`
+### `load_topic_context`
 
-   Loads and indexes information about a topic.
+Researches and indexes information about a topic.
 
-   - **Input Arguments (as JSON for the tool call):**
+**Input:**
 
-     ```JSON
-     {
-         "topic": "Advancements in Quantum Computing"
-     }
-     ```
+```json
+{
+    "topic": "Quantum Computing Error Correction"
+}
+```
 
-   - **Output (SDKLoadTopicResponse model):**
+**What it does:**
 
-     ```JSON
-     {
-         "message": "Topic 'Advancements in Quantum Computing' processing initiated. All operations initiated successfully.",
-         "topic": "Advancements in Quantum Computing",
-         "urls_processed": 3,
-         "perplexity_queried": true,
-         "jina_results_found": 5,
-         "errors": []
-     }
-     ```
+- Searches the web using Jina AI to find relevant URLs and snippets
+- Gets an AI-generated summary from Perplexity AI
+- Crawls the found URLs using Firecrawl to get full content
+- Embeds all content using Voyage AI and stores in Milvus
 
-2. `query_topic_context`
+**Output:**
 
-   Queries the indexed information.
+```json
+{
+    "message": "Topic 'Quantum Computing Error Correction' processing initiated. All operations initiated successfully.",
+    "topic": "Quantum Computing Error Correction",
+    "urls_processed": 3,
+    "perplexity_queried": true,
+    "jina_results_found": 5,
+    "errors": []
+}
+```
 
-   - **Input Arguments (as JSON for the tool call):**
+### `query_topic_context`
 
-   ```JSON
-   {
-       "query": "What are the main challenges in building stable qubits?",
-       "top_k": 3
-   }
-   ```
+Search the indexed information using natural language.
 
-   - **Output (SDKQueryTopicResponse model):**
+**Input:**
+
+```json
+{
+    "query": "What are the main challenges in quantum error correction?",
+    "top_k": 5
+}
+```
+
+**What it does:**
+
+- Embeds your query using Voyage AI
+- Searches the Milvus vector database for semantically similar content
+- Returns the most relevant text fragments with source information
+
+**Output:**
+
+```json
+{
+    "query": "What are the main challenges in quantum error correction?",
+    "results": [
+        {
+            "id": "450123...",
+            "text_content": "Decoherence remains a major hurdle in quantum error correction...",
+            "source_type": "firecrawl",
+            "source_identifier": "https://example.com/quantum-challenges",
+            "topic": "Quantum Computing Error Correction",
+            "distance": 0.23
+        }
+    ],
+    "message": "Found 5 relevant documents."
+}
+```
+
+## Example Workflow
+
+1. **Research a topic:**
 
    ```json
    {
-     "query": "What are the main challenges in building stable qubits?",
-     "results": [
-       {
-         "id": "450123...",
-         "text_content": "Decoherence remains a major hurdle...",
-         "source_type": "firecrawl",
-         "source_identifier": "[http://example.com/quantum_challenges](http://example.com/quantum_challenges)",
-         "topic": "Advancements in Quantum Computing",
-         "distance": 0.85
+       "tool": "load_topic_context",
+       "arguments": {
+           "topic": "Latest developments in renewable energy storage"
        }
-     ],
-     "message": "Found 1 relevant documents."
    }
    ```
 
-Refer to the MCP Python SDK documentation for details on how clients interact with MCP tools.
+2. **Query the information:**
 
-## Development Notes
+   ```json
+   {
+       "tool": "query_topic_context", 
+       "arguments": {
+           "query": "What are the most promising battery technologies?",
+           "top_k": 3
+       }
+   }
+   ```
 
-- Built with the modelcontextprotocol/python-sdk.
-- Embeddings: Voyage AI exclusively.
-- API Keys: All external service API keys are mandatory and checked at startup via config.py.
-- Milvus: HNSW index parameters are configurable via .env.
-- Error Handling: Uses custom exceptions; tools return structured responses that include error information or exceptions are handled by FastMCP's underlying FastAPI.
+3. **Get relevant results** with source attribution and semantic similarity scores.
+
+## Notes
+
+- All API keys are required for the server to function
+- The server will automatically handle embedding dimension matching for known Voyage AI models
+- Content is stored persistently in Milvus, so you can query topics multiple times without reloading
+- Failed API calls are handled gracefully with appropriate error messages

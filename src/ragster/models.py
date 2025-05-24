@@ -1,8 +1,9 @@
 """Pydantic models for request/response data structures."""
 
 from pathlib import Path
-from pydantic import BaseModel, Field
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 if __package__:
     from .config import settings
@@ -17,6 +18,7 @@ else:
 
 class LoadTopicRequest(BaseModel):
     """Request model for loading topic information."""
+
     topic: str = Field(
         ..., min_length=1, description="The topic to load information about."
     )
@@ -24,6 +26,7 @@ class LoadTopicRequest(BaseModel):
 
 class LoadTopicResponse(BaseModel):
     """Response model for topic loading operations."""
+
     message: str
     topic: str
     urls_processed: int = 0
@@ -34,6 +37,7 @@ class LoadTopicResponse(BaseModel):
 
 class QueryTopicRequest(BaseModel):
     """Request model for querying topic context."""
+
     query: str = Field(
         ..., min_length=1, description="The query to search for relevant context."
     )
@@ -46,6 +50,7 @@ class QueryTopicRequest(BaseModel):
 
 class DocumentFragment(BaseModel):
     """Model for individual search result documents."""
+
     id: Any
     text_content: str
     source_type: str
@@ -56,6 +61,7 @@ class DocumentFragment(BaseModel):
 
 class QueryTopicResponse(BaseModel):
     """Response model for topic query operations."""
+
     query: str
     results: list[DocumentFragment]
     message: str | None = None

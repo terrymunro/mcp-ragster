@@ -1,6 +1,6 @@
 [project]
 name = "mcp-ragster"
-version = "0.3.0"
+version = "0.4.0"
 description = "Model Context Protocol (MCP) server for RAG using Jina, Firecrawl, Perplexity, Milvus, and Voyage AI with improved error handling."
 authors = [
     { name = "Gemini", email = "gemini@google.com" },
@@ -20,6 +20,12 @@ dependencies = [
     "mcp[cli]>=1.9.1",
 ]
 
+[dependency-groups]
+dev = [
+    "pyright>=1.1.401",
+    "ruff>=0.11.11",
+]
+
 [project.scripts]
 start-mcp-server = "ragster.main:main"
 
@@ -29,12 +35,6 @@ start-mcp-server = "ragster.main:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[dependency-groups]
-dev = [
-    "pyright>=1.1.401",
-    "ruff>=0.11.11",
-]
-
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src/ragster"]
 
