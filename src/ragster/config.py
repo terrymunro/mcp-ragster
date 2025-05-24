@@ -85,9 +85,9 @@ class Settings:
     MILVUS_INDEX_TYPE: str = os.getenv("MILVUS_INDEX_TYPE", "HNSW")
 
     # Milvus Index Parameters (examples for HNSW and IVF_FLAT)
-    MILVUS_HNSW_M: int = int(os.getenv("MILVUS_HNSW_M", 16))
+    MILVUS_HNSW_M: int = int(os.getenv("MILVUS_HNSW_M", 32))
     MILVUS_HNSW_EF_CONSTRUCTION: int = int(
-        os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", 200)
+        os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", 400)
     )
     MILVUS_IVF_NLIST: int = int(
         os.getenv("MILVUS_IVF_NLIST", 1024)
@@ -95,6 +95,7 @@ class Settings:
 
     # Milvus Search Parameters
     MILVUS_SEARCH_EF: int = int(os.getenv("MILVUS_SEARCH_EF", 64))  # For HNSW
+    MILVUS_SEARCH_EF_EXPLORATION: int = int(os.getenv("MILVUS_SEARCH_EF_EXPLORATION", 128))  # For exploration mode
     MILVUS_SEARCH_NPROBE: int = int(
         os.getenv("MILVUS_SEARCH_NPROBE", 10)
     )  # For IVF_FLAT
@@ -102,6 +103,9 @@ class Settings:
     # Search parameters
     MILVUS_SEARCH_LIMIT: int = int(os.getenv("MILVUS_SEARCH_LIMIT", 5))
     JINA_SEARCH_LIMIT: int = int(os.getenv("JINA_SEARCH_LIMIT", 5))
+    
+    # Concurrency settings
+    MAX_CONCURRENT_FIRECRAWL: int = int(os.getenv("MAX_CONCURRENT_FIRECRAWL", 3))
 
     # API Endpoints
     JINA_SEARCH_API_URL: str = "https://s.jina.ai/search"

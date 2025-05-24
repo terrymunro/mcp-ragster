@@ -1,6 +1,11 @@
 import httpx 
 import logging
+import asyncio
+import time
 from typing import List, Dict, Any, Optional # Optional can be removed if methods always raise on failure
+from collections import defaultdict
+from urllib.parse import urlparse
+from functools import lru_cache
 from firecrawl import FirecrawlApp 
 
 if __package__:
@@ -110,3 +115,126 @@ class ExternalAPIClient:
         # Firecrawl client doesn't have an explicit close method in the SDK from what's seen.
         # httpx clients for Jina/Perplexity are created per-call.
         logger.info("ExternalAPIClient close called (currently no specific resources to release).")
+
+
+class FirecrawlBatcher:
+    """Manages batched Firecrawl requests with domain grouping and deduplication."""
+    
+    def __init__(self, client: ExternalAPIClient, max_concurrent: int = 3):
+        self.client = client
+        self.max_concurrent = max_concurrent
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+        
+        # URL deduplication cache with timestamps
+        self._url_cache: dict[str, tuple[dict[str, Any], float]] = {}
+        self._cache_ttl = 3600  # 1 hour TTL
+        
+        # Retry queue with backoff
+        self._retry_queue: list[tuple[str, int, float]] = []  # (url, attempts, next_retry_time)
+        self._max_retries = 3
+        self._base_backoff = 2.0
+        
+        # Metrics tracking
+        self.metrics = {
+            'total_requests': 0,
+            'cache_hits': 0,
+            'successful_crawls': 0,
+            'failed_crawls': 0,
+            'retries': 0,
+            'domains_processed': set()
+        }
+    
+    def _get_domain(self, url: str) -> str:
+        """Extract domain from URL for grouping."""
+        parsed = urlparse(url)
+        return parsed.netloc.lower()
+    
+    def _is_cached(self, url: str) -> tuple[bool, Optional[dict[str, Any]]]:
+        """Check if URL result is cached and not expired."""
+        if url in self._url_cache:
+            result, timestamp = self._url_cache[url]
+            if time.time() - timestamp < self._cache_ttl:
+                self.metrics['cache_hits'] += 1
+                return True, result
+            else:
+                # Expired, remove from cache
+                del self._url_cache[url]
+        return False, None
+    
+    async def _crawl_with_retry(self, url: str) -> Optional[dict[str, Any]]:
+        """Crawl URL with retry logic."""
+        attempts = 0
+        while attempts < self._max_retries:
+            try:
+                async with self.semaphore:
+                    result = await self.client.crawl_url_firecrawl(url)
+                    self.metrics['successful_crawls'] += 1
+                    # Cache the result
+                    self._url_cache[url] = (result, time.time())
+                    return result
+            except FirecrawlError as e:
+                attempts += 1
+                self.metrics['retries'] += 1
+                if attempts >= self._max_retries:
+                    self.metrics['failed_crawls'] += 1
+                    logger.error(f"Failed to crawl {url} after {attempts} attempts: {e}")
+                    return None
+                # Exponential backoff
+                backoff = self._base_backoff ** attempts
+                logger.warning(f"Retrying {url} after {backoff}s (attempt {attempts}/{self._max_retries})")
+                await asyncio.sleep(backoff)
+        return None
+    
+    async def crawl_urls(self, urls: list[str]) -> list[tuple[str, Optional[dict[str, Any]]]]:
+        """Crawl multiple URLs with domain-based grouping and caching."""
+        # Group URLs by domain
+        domain_groups = defaultdict(list)
+        results: list[tuple[str, Optional[dict[str, Any]]]] = []
+        
+        for url in urls:
+            self.metrics['total_requests'] += 1
+            
+            # Check cache first
+            is_cached, cached_result = self._is_cached(url)
+            if is_cached:
+                results.append((url, cached_result))
+                continue
+            
+            # Group by domain for sequential processing
+            domain = self._get_domain(url)
+            domain_groups[domain].append(url)
+            self.metrics['domains_processed'].add(domain)
+        
+        # Process each domain group
+        crawl_tasks = []
+        for domain, domain_urls in domain_groups.items():
+            # Create a task for each domain group
+            crawl_tasks.append(self._process_domain_urls(domain_urls))
+        
+        # Process all domain groups concurrently
+        if crawl_tasks:
+            domain_results = await asyncio.gather(*crawl_tasks)
+            for domain_result in domain_results:
+                results.extend(domain_result)
+        
+        return results
+    
+    async def _process_domain_urls(self, urls: list[str]) -> list[tuple[str, Optional[dict[str, Any]]]]:
+        """Process URLs from the same domain sequentially to avoid rate limiting."""
+        results = []
+        for i, url in enumerate(urls):
+            if i > 0:
+                # Small delay between same-domain requests
+                await asyncio.sleep(0.5)
+            result = await self._crawl_with_retry(url)
+            results.append((url, result))
+        return results
+    
+    def get_metrics(self) -> dict[str, Any]:
+        """Return current metrics."""
+        return {
+            **self.metrics,
+            'cache_size': len(self._url_cache),
+            'domains_processed': len(self.metrics['domains_processed']),
+            'cache_hit_rate': self.metrics['cache_hits'] / max(1, self.metrics['total_requests'])
+        }

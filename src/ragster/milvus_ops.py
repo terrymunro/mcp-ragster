@@ -120,12 +120,14 @@ class MilvusOperator:
     async def insert_data(self, data_rows: List[Dict[str, Any]]) -> List[Any]:
         return await asyncio.to_thread(self._sync_insert_data, data_rows)
 
-    def _sync_query_data(self, query_vector: List[float], top_k: int, expr: str = None) -> List[Dict[str, Any]]:
+    def _sync_query_data(self, query_vector: List[float], top_k: int, expr: str = None, search_ef: int = None) -> List[Dict[str, Any]]:
         if not self.collection: raise MilvusOperationError("Collection not initialized for query.")
         if not query_vector: raise MilvusOperationError("Query vector is empty.")
         search_params_definition = {"metric_type": settings.MILVUS_METRIC_TYPE, "params": {}}
         if settings.MILVUS_INDEX_TYPE == "HNSW":
-            search_params_definition["params"] = {"ef": settings.MILVUS_SEARCH_EF}
+            # Use provided search_ef or default from settings
+            ef_value = search_ef if search_ef is not None else settings.MILVUS_SEARCH_EF
+            search_params_definition["params"] = {"ef": ef_value}
         elif settings.MILVUS_INDEX_TYPE == "IVF_FLAT":
             search_params_definition["params"] = {"nprobe": settings.MILVUS_SEARCH_NPROBE}
         output_fields = [settings.MILVUS_ID_FIELD_NAME, settings.MILVUS_TEXT_FIELD_NAME, settings.MILVUS_TOPIC_FIELD_NAME, settings.MILVUS_SOURCE_TYPE_FIELD_NAME, settings.MILVUS_SOURCE_IDENTIFIER_FIELD_NAME]
@@ -145,8 +147,8 @@ class MilvusOperator:
         except MilvusException as e:
             raise MilvusOperationError(f"Failed to query Milvus: {e}", underlying_error=e)
     
-    async def query_data(self, query_vector: List[float], top_k: int, expr: str = None) -> List[Dict[str, Any]]:
-        return await asyncio.to_thread(self._sync_query_data, query_vector, top_k, expr)
+    async def query_data(self, query_vector: List[float], top_k: int, expr: str = None, search_ef: int = None) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self._sync_query_data, query_vector, top_k, expr, search_ef)
 
     async def close(self):
         """Placeholder for any explicit cleanup if needed, e.g., connections.disconnect(self.alias)"""
