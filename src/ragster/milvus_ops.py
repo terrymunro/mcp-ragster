@@ -150,6 +150,90 @@ class MilvusOperator:
     async def query_data(self, query_vector: List[float], top_k: int, expr: str = None, search_ef: int = None) -> List[Dict[str, Any]]:
         return await asyncio.to_thread(self._sync_query_data, query_vector, top_k, expr, search_ef)
 
+    def _sync_health_check(self) -> bool:
+        """Check Milvus connection health."""
+        try:
+            if not connections.has_connection(self.alias):
+                return False
+            # Try a simple operation to verify connection
+            if self.collection:
+                _ = self.collection.num_entities
+                return True
+            return False
+        except Exception as e:
+            logger.warning(f"Milvus health check failed: {e}")
+            return False
+    
+    async def health_check(self) -> bool:
+        """Async health check for Milvus connection."""
+        return await asyncio.to_thread(self._sync_health_check)
+    
+    def _sync_reconnect(self) -> bool:
+        """Reconnect to Milvus if connection is lost."""
+        try:
+            if connections.has_connection(self.alias):
+                connections.disconnect(self.alias)
+            
+            # Reconnect with same parameters
+            connections.connect(
+                alias=self.alias,
+                host=settings.MILVUS_HOST,
+                port=settings.MILVUS_PORT,
+                user=settings.MILVUS_USER,
+                password=settings.MILVUS_PASSWORD,
+                secure=settings.MILVUS_USE_SSL
+            )
+            
+            # Reinitialize collection reference
+            if utility.has_collection(settings.MILVUS_COLLECTION_NAME, using=self.alias):
+                self.collection = Collection(settings.MILVUS_COLLECTION_NAME, using=self.alias)
+                self.collection.load()
+                logger.info(f"Milvus reconnected and collection reloaded for alias '{self.alias}'")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to reconnect Milvus: {e}")
+            return False
+    
+    async def reconnect(self) -> bool:
+        """Async reconnect to Milvus."""
+        return await asyncio.to_thread(self._sync_reconnect)
+    
+    def _sync_get_stored_topics(self, limit: int = 10) -> list[str]:
+        """Get unique topics from stored data."""
+        try:
+            if not self.collection:
+                return []
+            
+            # Query for unique topics (simplified approach)
+            results = self.collection.query(
+                expr="",  # Get all records
+                output_fields=[settings.MILVUS_TOPIC_FIELD_NAME],
+                limit=limit * 3  # Get more to ensure uniqueness
+            )
+            
+            # Extract unique topics
+            topics = list(set(result[settings.MILVUS_TOPIC_FIELD_NAME] for result in results))
+            return topics[:limit]
+        except Exception as e:
+            logger.warning(f"Failed to get stored topics for warm-up: {e}")
+            return []
+    
+    async def get_stored_topics(self, limit: int = 10) -> list[str]:
+        """Async get stored topics."""
+        return await asyncio.to_thread(self._sync_get_stored_topics, limit)
+    
+    def _sync_has_data(self) -> bool:
+        """Check if collection has any data."""
+        try:
+            return self.collection and self.collection.num_entities > 0
+        except Exception:
+            return False
+    
+    async def has_data(self) -> bool:
+        """Async check if collection has data."""
+        return await asyncio.to_thread(self._sync_has_data)
+
     async def close(self):
         """Placeholder for any explicit cleanup if needed, e.g., connections.disconnect(self.alias)"""
         # PyMilvus connections are typically managed globally or per alias.

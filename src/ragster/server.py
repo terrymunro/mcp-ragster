@@ -54,6 +54,11 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
             http_client=clients['http_client']
         )
         logger.info("All clients initialized successfully.")
+        
+        # Perform index warm-up if enabled and data exists
+        if settings.ENABLE_INDEX_WARMUP:
+            await _perform_index_warmup(app_ctx)
+        
         yield app_ctx
         
     except Exception as e:
@@ -64,6 +69,52 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         logger.info("MCP Server lifespan shutdown: Cleaning up clients...")
         await _cleanup_clients(clients)
         logger.info("Client cleanup complete.")
+
+
+async def _perform_index_warmup(app_ctx: AppContext) -> None:
+    """Perform smart index warm-up using stored data."""
+    try:
+        has_data = await app_ctx.milvus_operator.has_data()
+        if not has_data:
+            logger.info("Index warm-up skipped: No data in collection")
+            return
+        
+        logger.info("Starting index warm-up...")
+        stored_topics = await app_ctx.milvus_operator.get_stored_topics(limit=5)
+        
+        if not stored_topics:
+            logger.info("Index warm-up skipped: No topics found")
+            return
+        
+        # Warm up with stored topic variations
+        warmup_queries = []
+        for topic in stored_topics:
+            warmup_queries.extend([
+                topic,
+                f"overview of {topic}",
+                f"examples of {topic}"
+            ])
+        
+        # Limit to 10 warm-up queries
+        warmup_queries = warmup_queries[:10]
+        
+        from .embedding_client import VoyageInputType
+        voyage_query_type = settings.VOYAGEAI_INPUT_TYPE_QUERY
+        
+        for i, query in enumerate(warmup_queries):
+            try:
+                embedding = await app_ctx.embedding_client.embed_texts(
+                    query, input_type=voyage_query_type
+                )
+                await app_ctx.milvus_operator.query_data(embedding, top_k=3)
+                logger.debug(f"Warm-up query {i+1}/{len(warmup_queries)}: {query[:30]}...")
+            except Exception as e:
+                logger.warning(f"Warm-up query failed: {e}")
+        
+        logger.info(f"Index warm-up completed with {len(warmup_queries)} queries")
+        
+    except Exception as e:
+        logger.error(f"Index warm-up failed: {e}")
 
 
 async def _cleanup_clients(clients: dict[str, any]) -> None:

@@ -106,6 +106,11 @@ class Settings:
     
     # Concurrency settings
     MAX_CONCURRENT_FIRECRAWL: int = int(os.getenv("MAX_CONCURRENT_FIRECRAWL", 3))
+    
+    # Caching settings
+    JINA_CACHE_TTL_HOURS: int = int(os.getenv("JINA_CACHE_TTL_HOURS", 3))
+    EMBEDDING_CACHE_SIZE: int = int(os.getenv("EMBEDDING_CACHE_SIZE", 1000))
+    ENABLE_INDEX_WARMUP: bool = os.getenv("ENABLE_INDEX_WARMUP", "True").lower() == "true"
 
     # API Endpoints
     JINA_SEARCH_API_URL: str = "https://s.jina.ai/search"

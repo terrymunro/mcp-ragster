@@ -27,6 +27,11 @@ class ExternalAPIClient:
         self.http_client = http_client
         self.firecrawl_client: Optional[FirecrawlApp] = None
         
+        # Initialize Jina search cache
+        self._jina_cache: dict[str, tuple[list[dict[str, Any]], float]] = {}
+        self._jina_cache_ttl = settings.JINA_CACHE_TTL_HOURS * 3600  # Convert to seconds
+        logger.info(f"Jina cache initialized with {settings.JINA_CACHE_TTL_HOURS}h TTL")
+        
         # API key/URL presence for Firecrawl is guaranteed by config.py
         try:
             if settings.FIRECRAWL_API_KEY:
@@ -84,7 +89,34 @@ class ExternalAPIClient:
             if isinstance(e, (PerplexityAPIError, APICallError)): raise
             raise PerplexityAPIError(f"Unexpected error querying Perplexity: {e}", underlying_error=e)
 
+    def _get_jina_cache_key(self, topic: str, num_results: int) -> str:
+        """Generate cache key for Jina search."""
+        normalized_topic = topic.lower().strip()
+        return f"jina:{hash(f'{normalized_topic}:{num_results}')}"
+    
+    def _jina_cache_get(self, cache_key: str) -> Optional[list[dict[str, Any]]]:
+        """Get Jina results from cache if not expired."""
+        if cache_key in self._jina_cache:
+            results, timestamp = self._jina_cache[cache_key]
+            if time.time() - timestamp < self._jina_cache_ttl:
+                return results
+            else:
+                # Expired, remove from cache
+                del self._jina_cache[cache_key]
+        return None
+    
+    def _jina_cache_set(self, cache_key: str, results: list[dict[str, Any]]) -> None:
+        """Set Jina results in cache."""
+        self._jina_cache[cache_key] = (results, time.time())
+
     async def search_jina(self, topic: str, num_results: int = 5) -> List[Dict[str, Any]]:
+        # Check cache first
+        cache_key = self._get_jina_cache_key(topic, num_results)
+        cached_results = self._jina_cache_get(cache_key)
+        if cached_results:
+            logger.debug(f"Jina cache hit for topic: {topic}")
+            return cached_results
+        
         headers = {"Authorization": f"Bearer {settings.JINA_API_KEY}", "Content-Type": "application/json", "X-With-Generated-Alt": "true"}
         search_url = f"{settings.JINA_SEARCH_API_URL}?q={topic}&limit={num_results}"
         try:
@@ -99,8 +131,13 @@ class ExternalAPIClient:
             response_data = response.json()
             data_source = response_data.get('data') if isinstance(response_data.get('data'), list) else response_data.get('results')
             if isinstance(data_source, list):
-                return [{"url": i['url'], "title": i['title'], "snippet": i.get('snippet', i.get('description', ''))} 
-                        for i in data_source if i.get('url') and i.get('title')][:num_results]
+                results = [{"url": i['url'], "title": i['title'], "snippet": i.get('snippet', i.get('description', ''))} 
+                          for i in data_source if i.get('url') and i.get('title')][:num_results]
+                
+                # Cache the results
+                self._jina_cache_set(cache_key, results)
+                logger.debug(f"Jina results cached for topic: {topic}")
+                return results
             raise JinaAPIError(f"Jina Search response format unexpected: {str(response_data)[:200]}")
         except httpx.HTTPStatusError as e:
             raise APICallError("Jina", e.response.status_code, e.response.text[:200]) from e
