@@ -249,8 +249,6 @@ async def load_topic_context(
     logger.info(f"[Tool: load_topic_context] Processing topic: {topic}")
 
     processor = TopicProcessor(app_context)
-
-    # Process Jina search and embed snippets
     jina_results = await processor.process_jina_search(topic)
 
     # Process concurrent tasks (Perplexity + Firecrawl)

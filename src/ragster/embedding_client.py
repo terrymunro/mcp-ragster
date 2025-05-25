@@ -4,17 +4,8 @@ from typing import Literal, TypeGuard
 
 import httpx
 
-if __package__:
-    from .config import settings
-    from .exceptions import APICallError, EmbeddingServiceError
-else:
-    import sys
-    from pathlib import Path
-
-    project_root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(project_root))
-    from ragster.config import settings
-    from ragster.exceptions import APICallError, EmbeddingServiceError
+from .config import settings
+from .exceptions import APICallError, EmbeddingServiceError
 
 
 logger = logging.getLogger(__name__)
@@ -175,7 +166,9 @@ class EmbeddingClient:
             if isinstance(texts, str):
                 return new_embeddings[0]
 
-            all_embeddings: list[list[float]] = [[] for _ in range(len(input_texts_list))]
+            all_embeddings: list[list[float]] = [
+                [] for _ in range(len(input_texts_list))
+            ]
             for i, embedding in cached_results:
                 all_embeddings[i] = embedding
             for i, embedding in zip(uncached_indices, new_embeddings):

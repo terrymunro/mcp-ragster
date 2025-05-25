@@ -13,17 +13,8 @@ from pymilvus import (
     utility,
 )
 
-if __package__:
-    from .config import settings
-    from .exceptions import MilvusOperationError
-else:
-    import sys
-    from pathlib import Path
-
-    project_root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(project_root))
-    from ragster.config import settings
-    from ragster.exceptions import MilvusOperationError
+from .config import settings
+from .exceptions import MilvusOperationError
 
 logger = logging.getLogger(__name__)
 

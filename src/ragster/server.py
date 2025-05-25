@@ -161,9 +161,7 @@ async def _perform_index_warmup(app_ctx: AppContext) -> None:
                 assert isinstance(query_vector, list) and all(
                     isinstance(x, float) for x in query_vector
                 )
-                await app_ctx.milvus_operator.query_data(
-                    cast(list[float], query_vector), top_k=3
-                )
+                await app_ctx.milvus_operator.query_data(query_vector, top_k=3)  # type: ignore[arg-type]
                 logger.debug(
                     f"Warm-up query {i + 1}/{len(warmup_queries)}: {query[:30]}..."
                 )

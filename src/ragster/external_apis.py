@@ -8,27 +8,13 @@ from urllib.parse import urlparse
 import httpx
 from firecrawl import FirecrawlApp
 
-if __package__:
-    from .config import settings
-    from .exceptions import (
-        APICallError,
-        FirecrawlError,
-        JinaAPIError,
-        PerplexityAPIError,
-    )
-else:
-    import sys
-    from pathlib import Path
-
-    project_root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(project_root))
-    from ragster.config import settings
-    from ragster.exceptions import (
-        APICallError,
-        FirecrawlError,
-        JinaAPIError,
-        PerplexityAPIError,
-    )
+from .config import settings
+from .exceptions import (
+    APICallError,
+    FirecrawlError,
+    JinaAPIError,
+    PerplexityAPIError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +27,7 @@ class ExternalAPIClient:
 
         # Initialize Jina search cache
         self._jina_cache: dict[str, tuple[list[dict[str, Any]], float]] = {}
-        self._jina_cache_ttl = (
-            settings.JINA_CACHE_TTL_HOURS * 3600
-        )  # Convert to seconds
+        self._jina_cache_ttl = settings.JINA_CACHE_TTL_HOURS * 3600
         logger.info(f"Jina cache initialized with {settings.JINA_CACHE_TTL_HOURS}h TTL")
 
         # API key/URL presence for Firecrawl is guaranteed by config.py
@@ -59,7 +43,7 @@ class ExternalAPIClient:
                     f"Firecrawl client initialized with base URL: {settings.FIRECRAWL_API_URL}"
                 )
             # No 'else' needed as config.py would have raised error
-        except Exception as e:  # Catch errors from FirecrawlApp constructor
+        except Exception as e:
             logger.critical(
                 f"Failed to initialize FirecrawlApp client: {e}", exc_info=True
             )
@@ -275,10 +259,8 @@ class FirecrawlBatcher:
         self._url_cache: dict[str, tuple[dict[str, Any], float]] = {}
         self._cache_ttl = 3600  # 1 hour TTL
 
-        # Retry queue with backoff
-        self._retry_queue: list[
-            tuple[str, int, float]
-        ] = []  # (url, attempts, next_retry_time)
+        # Retry queue with backoff - (url, attempts, next_retry_time)
+        self._retry_queue: list[tuple[str, int, float]] = []
         self._max_retries = 3
         self._base_backoff = 2.0
 

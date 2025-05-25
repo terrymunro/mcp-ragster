@@ -35,8 +35,6 @@ class Settings:
     )
     VOYAGEAI_INPUT_TYPE_QUERY: str = os.getenv("VOYAGEAI_INPUT_TYPE_QUERY", "query")
 
-    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", 1024))
-
     # Milvus Configuration
     MILVUS_ALIAS: str = os.getenv("MILVUS_ALIAS", "default")
     MILVUS_HOST: str = os.getenv("MILVUS_HOST", "localhost")
@@ -77,14 +75,12 @@ class Settings:
     )
     MILVUS_METRIC_TYPE: str = os.getenv("MILVUS_METRIC_TYPE", "IP")
     MILVUS_INDEX_TYPE: str = os.getenv("MILVUS_INDEX_TYPE", "HNSW")
-
     # Milvus Index Parameters (examples for HNSW and IVF_FLAT)
     MILVUS_HNSW_M: int = int(os.getenv("MILVUS_HNSW_M", 32))
     MILVUS_HNSW_EF_CONSTRUCTION: int = int(
         os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", 400)
     )
     MILVUS_IVF_NLIST: int = int(os.getenv("MILVUS_IVF_NLIST", 1024))
-
     # Milvus Search Parameters
     MILVUS_SEARCH_EF: int = int(os.getenv("MILVUS_SEARCH_EF", 64))
     MILVUS_SEARCH_EF_EXPLORATION: int = int(
@@ -101,6 +97,7 @@ class Settings:
 
     # Caching settings
     JINA_CACHE_TTL_HOURS: int = int(os.getenv("JINA_CACHE_TTL_HOURS", 3))
+    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION"))
     EMBEDDING_CACHE_SIZE: int = int(os.getenv("EMBEDDING_CACHE_SIZE", 1000))
     ENABLE_INDEX_WARMUP: bool = (
         os.getenv("ENABLE_INDEX_WARMUP", "True").lower() == "true"
@@ -124,9 +121,9 @@ class Settings:
                 "Either FIRECRAWL_API_URL or FIRECRAWL_API_KEY must be set."
             )
         if not self.EMBEDDING_DIMENSION:
-            dim = KNOWN_VOYAGE_MODEL_DIMS.get(self.VOYAGEAI_MODEL_NAME)
-            if dim is not None:
-                self.EMBEDDING_DIMENSION = dim
+            self.EMBEDDING_DIMENSION = KNOWN_VOYAGE_MODEL_DIMS.get(
+                self.VOYAGEAI_MODEL_NAME
+            )
         self.MILVUS_VECTOR_DIMENSION = self.EMBEDDING_DIMENSION
 
         if self.MILVUS_METRIC_TYPE == "L2" and "voyage" in self.VOYAGEAI_MODEL_NAME:

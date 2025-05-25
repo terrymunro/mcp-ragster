@@ -14,7 +14,7 @@ from .tools import (
 )
 
 logger = logging.getLogger(__name__)
-logger.info("Starting MCP RAG Context Server...")
+logger.info(f"Starting MCP RAG Context Server with settings: {settings}")
 mcp_server = create_mcp_server()
 
 
