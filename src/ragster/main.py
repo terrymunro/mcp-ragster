@@ -24,7 +24,7 @@ mcp_server = create_mcp_server()
 )
 async def load_topic_tool(args: LoadTopicToolArgs, ctx: Context) -> LoadTopicResponse:
     """MCP Tool to load and index topic context."""
-    app_ctx = getattr(ctx, "lifespan", None)
+    app_ctx = ctx.request_context.lifespan_context
     if app_ctx is None:
         raise RuntimeError("Application context not available")
     return await load_topic_context(args, app_ctx)
@@ -38,7 +38,7 @@ async def query_topic_tool(
     args: QueryTopicToolArgs, ctx: Context
 ) -> QueryTopicResponse:
     """MCP Tool to query indexed topic context."""
-    app_ctx = getattr(ctx, "lifespan", None)
+    app_ctx = ctx.request_context.lifespan_context
     if app_ctx is None:
         raise RuntimeError("Application context not available")
     return await query_topic_context(args, app_ctx)

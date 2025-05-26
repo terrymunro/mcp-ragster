@@ -35,18 +35,13 @@ class Settings:
     )
     VOYAGEAI_INPUT_TYPE_QUERY: str = os.getenv("VOYAGEAI_INPUT_TYPE_QUERY", "query")
 
+    # Redis Configuration
+    REDIS_URI: str = os.getenv("REDIS_URI", "redis://localhost:6379")
+
     # Milvus Configuration
-    MILVUS_ALIAS: str = os.getenv("MILVUS_ALIAS", "default")
-    MILVUS_HOST: str = os.getenv("MILVUS_HOST", "localhost")
-    MILVUS_PORT: str = os.getenv("MILVUS_PORT", "19530")
-    MILVUS_USER: str | None = os.getenv("MILVUS_USER")
-    MILVUS_PASSWORD: str | None = os.getenv("MILVUS_PASSWORD")
-    MILVUS_USE_SSL: bool = os.getenv("MILVUS_USE_SSL", "False").lower() == "true"
-    MILVUS_SERVER_PEM_PATH: str | None = os.getenv("MILVUS_SERVER_PEM_PATH")
-    MILVUS_SERVER_NAME: str | None = os.getenv("MILVUS_SERVER_NAME")
-    MILVUS_CA_CERT_PATH: str | None = os.getenv("MILVUS_CA_CERT_PATH")
-    MILVUS_CLIENT_KEY_PATH: str | None = os.getenv("MILVUS_CLIENT_KEY_PATH")
-    MILVUS_CLIENT_PEM_PATH: str | None = os.getenv("MILVUS_CLIENT_PEM_PATH")
+    MILVUS_DB: str = os.getenv("MILVUS_DB", "default")
+    MILVUS_URI: str = os.getenv("MILVUS_URI", "localhost")
+    MILVUS_TOKEN: str | None = os.getenv("MILVUS_TOKEN")
 
     # Firecrawl Configuration
     FIRECRAWL_API_URL: str | None = os.getenv("FIRECRAWL_API_URL")
@@ -97,14 +92,13 @@ class Settings:
 
     # Caching settings
     JINA_CACHE_TTL_HOURS: int = int(os.getenv("JINA_CACHE_TTL_HOURS", 3))
-    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION"))
     EMBEDDING_CACHE_SIZE: int = int(os.getenv("EMBEDDING_CACHE_SIZE", 1000))
     ENABLE_INDEX_WARMUP: bool = (
         os.getenv("ENABLE_INDEX_WARMUP", "True").lower() == "true"
     )
 
     # API Endpoints
-    JINA_SEARCH_API_URL: str = "https://s.jina.ai/search"
+    JINA_SEARCH_API_URL: str = "https://s.jina.ai"
     PERPLEXITY_CHAT_API_URL: str = "https://api.perplexity.ai/chat/completions"
 
     def __init__(self):
@@ -120,10 +114,21 @@ class Settings:
             raise ConfigurationError(
                 "Either FIRECRAWL_API_URL or FIRECRAWL_API_KEY must be set."
             )
+
+        # Initialize EMBEDDING_DIMENSION from environment or use fallback
+        embedding_dim_env = os.getenv("EMBEDDING_DIMENSION")
+        self.EMBEDDING_DIMENSION: int = (
+            int(embedding_dim_env) if embedding_dim_env else 0
+        )
+
         if not self.EMBEDDING_DIMENSION:
-            self.EMBEDDING_DIMENSION = KNOWN_VOYAGE_MODEL_DIMS.get(
-                self.VOYAGEAI_MODEL_NAME
-            )
+            known_dim = KNOWN_VOYAGE_MODEL_DIMS.get(self.VOYAGEAI_MODEL_NAME)
+            if known_dim is None:
+                raise ConfigurationError(
+                    f"EMBEDDING_DIMENSION not set and model '{self.VOYAGEAI_MODEL_NAME}' not in known models. "
+                    f"Please set EMBEDDING_DIMENSION in environment variables."
+                )
+            self.EMBEDDING_DIMENSION = known_dim
         self.MILVUS_VECTOR_DIMENSION = self.EMBEDDING_DIMENSION
 
         if self.MILVUS_METRIC_TYPE == "L2" and "voyage" in self.VOYAGEAI_MODEL_NAME:

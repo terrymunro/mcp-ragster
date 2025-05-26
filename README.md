@@ -201,3 +201,9 @@ Run the test suite using `uv` and `pytest`:
 ```bash
 uv run pytest
 ```
+
+## Documentation
+
+- https://docs.jina.ai/
+- https://docs.perplexity.ai/home
+- https://milvus.io/api-reference/pymilvus/v2.5.x/About.md

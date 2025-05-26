@@ -84,13 +84,15 @@ Uses relative imports with fallback for direct execution. Pydantic models provid
 ## Language and Type Considerations
 
 - Use Python 3.13 syntax and types
-- **NEVER** use `# type: ignore` - Instead try to understand the type error properly and either adjust the types if necessary or if its not possible, fall back to using `object` if that isn't sufficient only then fall back to `Any`
-  - To re-iterate the priority is:
-    1. Accurate Types!
-    2. Use type `object`
-    3. Use type `Any`
-  - **ALWAYS** try to maximise the priority
-  - **Remember:** The type checker is always smarter than you when it comes to *types*. Trust the type checker! Work with it, not against it.
+- **NEVER** use `# type: ignore` (or any variant of disabling type checking) - Instead, try to understand the type error properly and either adjust the types if necessary or if its not possible, fall back to using `object` if that isn't sufficient only then fall back to `Any`
+  - To re-iterate: the priority is:
+    1. Use Accurate types whenever possible!
+    2. When its impossible to know, because its dynamic, or the third-party library does not have stubs, try to use type `object`
+    3. When that was not sufficient, and you don't have any choice then finally you can use type `Any` but add a FIXME comment as well
+  - **ALWAYS** use the priority system for typing
+  - **Remember:** The type checker is always smarter than you when it comes to _types_. Trust the type checker! Work with it, not against it.
+  - If you come across a type ignore comment, remove it and fix the issue!
+  - if you come across an Any that does not have a FIXME comment, remove the Any and try to set its type properly!
 - Use `uv` to run linters and formatters:
   - `uv run pyright` for type checking
   - `uv run ruff check .` for linting

@@ -1,5 +1,6 @@
 """MCP server configuration and lifespan management."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -76,7 +77,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 
         clients["embedding_client"] = EmbeddingClient()
         clients["milvus_operator"] = MilvusOperator()
-        await clients["milvus_operator"].connect_and_load()
+        clients["milvus_operator"].load_collection()
         clients["external_api_client"] = ExternalAPIClient(
             http_client=clients["http_client"]
         )
@@ -111,20 +112,20 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 async def _perform_index_warmup(app_ctx: AppContext) -> None:
     """Perform smart index warm-up using stored data."""
     try:
-        has_data = await app_ctx.milvus_operator.has_data()
+        has_data = app_ctx.milvus_operator.has_data()
         if not has_data:
             logger.info("Index warm-up skipped: No data in collection")
             return
 
         logger.info("Starting index warm-up...")
-        stored_topics = await app_ctx.milvus_operator.get_stored_topics(limit=5)
+        stored_topics = app_ctx.milvus_operator.get_stored_topics(limit=5)
 
         if not stored_topics:
             logger.info("Index warm-up skipped: No topics found")
             return
 
         # Warm up with stored topic variations
-        warmup_queries = []
+        warmup_queries: list[str] = []
         for topic in stored_topics:
             warmup_queries.extend(
                 [topic, f"overview of {topic}", f"examples of {topic}"]
@@ -139,29 +140,10 @@ async def _perform_index_warmup(app_ctx: AppContext) -> None:
 
         for i, query in enumerate(warmup_queries):
             try:
-                embedding = await app_ctx.embedding_client.embed_texts(
+                query_vector = await app_ctx.embedding_client.embed_texts(
                     query, input_type=voyage_query_type
                 )
-                # When embedding a single string, embed_texts returns list[float]
-                if isinstance(embedding, list) and all(
-                    isinstance(x, float) for x in embedding
-                ):
-                    query_vector = embedding
-                elif (
-                    isinstance(embedding, list)
-                    and len(embedding) > 0
-                    and isinstance(embedding[0], list)
-                ):
-                    # In case it returns list[list[float]], take the first one
-                    query_vector = embedding[0]
-                else:
-                    logger.warning(f"Unexpected embedding type: {type(embedding)}")
-                    continue
-                # Type assertion to help pyright understand the type
-                assert isinstance(query_vector, list) and all(
-                    isinstance(x, float) for x in query_vector
-                )
-                await app_ctx.milvus_operator.query_data(query_vector, top_k=3)  # type: ignore[arg-type]
+                app_ctx.milvus_operator.query_data(query_vector[0], top_k=3)
                 logger.debug(
                     f"Warm-up query {i + 1}/{len(warmup_queries)}: {query[:30]}..."
                 )
@@ -194,7 +176,10 @@ async def _cleanup_clients(clients: dict[str, Any]) -> None:
             elif hasattr(client, "close_voyage_client"):
                 await client.close_voyage_client()
             elif hasattr(client, "close"):
-                await client.close()
+                if asyncio.iscoroutinefunction(client.close):
+                    await client.close()
+                else:
+                    client.close()
         except Exception as e:
             logger.error(f"Error closing {client_name}: {e}")
 
