@@ -71,8 +71,8 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     try:
         # Create persistent HTTP client with connection pooling first
         clients["http_client"] = httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0, connect=10.0),
-            limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
+            timeout=httpx.Timeout(settings.HTTP_TIMEOUT_DEFAULT, connect=settings.HTTP_TIMEOUT_CONNECT),
+            limits=httpx.Limits(max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS, max_connections=settings.HTTP_MAX_CONNECTIONS),
         )
 
         clients["embedding_client"] = EmbeddingClient()

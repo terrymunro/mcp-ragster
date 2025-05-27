@@ -92,14 +92,33 @@ class Settings:
 
     # Caching settings
     JINA_CACHE_TTL_HOURS: int = int(os.getenv("JINA_CACHE_TTL_HOURS", 3))
-    EMBEDDING_CACHE_SIZE: int = int(os.getenv("EMBEDDING_CACHE_SIZE", 1000))
     ENABLE_INDEX_WARMUP: bool = (
         os.getenv("ENABLE_INDEX_WARMUP", "True").lower() == "true"
     )
 
     # API Endpoints
-    JINA_SEARCH_API_URL: str = "https://s.jina.ai"
-    PERPLEXITY_CHAT_API_URL: str = "https://api.perplexity.ai/chat/completions"
+    JINA_SEARCH_API_URL: str = os.getenv("JINA_SEARCH_API_URL", "https://s.jina.ai")
+    PERPLEXITY_CHAT_API_URL: str = os.getenv("PERPLEXITY_CHAT_API_URL", "https://api.perplexity.ai/chat/completions")
+
+    # HTTP Client Configuration
+    HTTP_TIMEOUT_DEFAULT: float = float(os.getenv("HTTP_TIMEOUT_DEFAULT", 30.0))
+    HTTP_TIMEOUT_CONNECT: float = float(os.getenv("HTTP_TIMEOUT_CONNECT", 10.0))
+    HTTP_TIMEOUT_PERPLEXITY: float = float(os.getenv("HTTP_TIMEOUT_PERPLEXITY", 60.0))
+    HTTP_TIMEOUT_JINA: float = float(os.getenv("HTTP_TIMEOUT_JINA", 30.0))
+    HTTP_TIMEOUT_EMBEDDING: float = float(os.getenv("HTTP_TIMEOUT_EMBEDDING", 30.0))
+    
+    # HTTP Connection Pool Settings
+    HTTP_MAX_KEEPALIVE_CONNECTIONS: int = int(os.getenv("HTTP_MAX_KEEPALIVE_CONNECTIONS", 20))
+    HTTP_MAX_CONNECTIONS: int = int(os.getenv("HTTP_MAX_CONNECTIONS", 100))
+
+    # Cache TTL Settings (in seconds)
+    EMBEDDING_CACHE_TTL_SECONDS: int = int(os.getenv("EMBEDDING_CACHE_TTL_SECONDS", 86400))  # 24 hours
+    FIRECRAWL_CACHE_TTL_SECONDS: int = int(os.getenv("FIRECRAWL_CACHE_TTL_SECONDS", 3600))  # 1 hour
+
+    # Retry Configuration for Firecrawl
+    FIRECRAWL_MAX_RETRIES: int = int(os.getenv("FIRECRAWL_MAX_RETRIES", 3))
+    FIRECRAWL_BASE_BACKOFF: float = float(os.getenv("FIRECRAWL_BASE_BACKOFF", 2.0))
+    FIRECRAWL_SAME_DOMAIN_DELAY: float = float(os.getenv("FIRECRAWL_SAME_DOMAIN_DELAY", 0.5))
 
     def __init__(self):
         if not self.VOYAGEAI_API_KEY:

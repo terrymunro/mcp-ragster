@@ -322,5 +322,4 @@ class MilvusOperator:
             return False
 
     def close(self):
-        # MilvusClient does not require explicit disconnect, but placeholder for future
-        pass
+        self.client.close()
