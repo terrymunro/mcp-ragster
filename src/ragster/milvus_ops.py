@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 from pymilvus import (
     Collection,
@@ -270,10 +270,14 @@ class MilvusOperator:
                     # Try to access the first result set
                     first_result = None
                     try:
-                        first_result = results[0] if hasattr(results, '__getitem__') else None  # type: ignore[misc]
+                        first_result = (
+                            cast(list[Any], results)[0]
+                            if hasattr(results, "__getitem__")
+                            else None
+                        )
                     except (IndexError, TypeError):
                         first_result = None
-                    
+
                     if first_result:
                         for hit in first_result:
                             entity_data = {"id": hit.id, "distance": hit.distance}

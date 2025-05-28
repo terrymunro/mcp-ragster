@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 from pydantic import BaseModel, Field
 
 from .config import settings
@@ -288,13 +288,19 @@ async def query_topic_context(
             query_text, input_type=voyage_input_query_type
         )
         # Ensure we have a single vector for querying
-        if isinstance(query_embedding, list) and len(query_embedding) > 0 and isinstance(query_embedding[0], list):
-            query_vector = query_embedding[0]
-        elif isinstance(query_embedding, list) and all(isinstance(x, float) for x in query_embedding):
-            query_vector = query_embedding
+        if (
+            isinstance(query_embedding, list)
+            and len(query_embedding) > 0
+            and isinstance(query_embedding[0], list)
+        ):
+            query_vector = cast(list[float], query_embedding[0])
+        elif isinstance(query_embedding, list) and all(
+            isinstance(x, float) for x in query_embedding
+        ):
+            query_vector = cast(list[float], query_embedding)
         else:
             raise MCPError(f"Unexpected embedding type: {type(query_embedding)}")
-        
+
         milvus_results = await app_context.milvus_operator.query_data(
             query_vector, top_k or settings.MILVUS_SEARCH_LIMIT, None, search_ef
         )

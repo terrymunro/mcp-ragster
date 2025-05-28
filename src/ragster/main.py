@@ -4,7 +4,6 @@ import logging
 
 from mcp.server.fastmcp import Context
 
-from .config import settings
 from .models import LoadTopicResponse, QueryTopicResponse
 from .server import create_mcp_server
 from .tools import (
