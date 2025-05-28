@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
+from collections.abc import Sequence
 
 from pymilvus import (
     Collection,
@@ -265,15 +266,10 @@ class MilvusOperator:
             )
             processed = []
             try:
-                # Handle different result types from Milvus search
                 if results:
-                    # Try to access the first result set
-                    first_result = None
-                    try:
-                        first_result = results[0] if hasattr(results, '__getitem__') else None  # type: ignore[misc]
-                    except (IndexError, TypeError):
-                        first_result = None
-                    
+                    search_results = cast(Sequence[Any], results)
+                    first_result = search_results[0] if search_results else None
+
                     if first_result:
                         for hit in first_result:
                             entity_data = {"id": hit.id, "distance": hit.distance}
