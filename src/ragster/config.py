@@ -8,8 +8,7 @@ from .exceptions import ConfigurationError
 
 load_dotenv()
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -22,6 +21,7 @@ KNOWN_VOYAGE_MODEL_DIMS = {
     "voyage-code-3": 2048,
     "voyage-law-2": 1024,
 }
+
 
 class Settings:
     # Voyage AI Configuration
@@ -80,12 +80,16 @@ class Settings:
 
     # Milvus Index Parameters (examples for HNSW and IVF_FLAT)
     MILVUS_HNSW_M: int = int(os.getenv("MILVUS_HNSW_M", 32))
-    MILVUS_HNSW_EF_CONSTRUCTION: int = int(os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", 400))
+    MILVUS_HNSW_EF_CONSTRUCTION: int = int(
+        os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", 400)
+    )
     MILVUS_IVF_NLIST: int = int(os.getenv("MILVUS_IVF_NLIST", 1024))
 
     # Milvus Search Parameters
     MILVUS_SEARCH_EF: int = int(os.getenv("MILVUS_SEARCH_EF", 64))
-    MILVUS_SEARCH_EF_EXPLORATION: int = int(os.getenv("MILVUS_SEARCH_EF_EXPLORATION", 128))
+    MILVUS_SEARCH_EF_EXPLORATION: int = int(
+        os.getenv("MILVUS_SEARCH_EF_EXPLORATION", 128)
+    )
     MILVUS_SEARCH_NPROBE: int = int(os.getenv("MILVUS_SEARCH_NPROBE", 10))
 
     # Search parameters
@@ -98,7 +102,9 @@ class Settings:
     # Caching settings
     JINA_CACHE_TTL_HOURS: int = int(os.getenv("JINA_CACHE_TTL_HOURS", 3))
     EMBEDDING_CACHE_SIZE: int = int(os.getenv("EMBEDDING_CACHE_SIZE", 1000))
-    ENABLE_INDEX_WARMUP: bool = (os.getenv("ENABLE_INDEX_WARMUP", "True").lower() == "true")
+    ENABLE_INDEX_WARMUP: bool = (
+        os.getenv("ENABLE_INDEX_WARMUP", "True").lower() == "true"
+    )
 
     # API Endpoints
     JINA_SEARCH_API_URL: str = "https://s.jina.ai/search"
@@ -108,13 +114,19 @@ class Settings:
         if not self.VOYAGEAI_API_KEY:
             raise ConfigurationError("VOYAGEAI_API_KEY is not set in the environment.")
         if not self.PERPLEXITY_API_KEY:
-            raise ConfigurationError("PERPLEXITY_API_KEY is not set in the environment.")
+            raise ConfigurationError(
+                "PERPLEXITY_API_KEY is not set in the environment."
+            )
         if not self.JINA_API_KEY:
             raise ConfigurationError("JINA_API_KEY is not set in the environment.")
         if not self.FIRECRAWL_API_URL and not self.FIRECRAWL_API_KEY:
-            raise ConfigurationError("Either FIRECRAWL_API_URL or FIRECRAWL_API_KEY must be set.")
+            raise ConfigurationError(
+                "Either FIRECRAWL_API_URL or FIRECRAWL_API_KEY must be set."
+            )
         if not self.EMBEDDING_DIMENSION:
-            self.EMBEDDING_DIMENSION = KNOWN_VOYAGE_MODEL_DIMS.get(self.VOYAGEAI_MODEL_NAME)
+            dim = KNOWN_VOYAGE_MODEL_DIMS.get(self.VOYAGEAI_MODEL_NAME)
+            if dim is not None:
+                self.EMBEDDING_DIMENSION = dim
         self.MILVUS_VECTOR_DIMENSION = self.EMBEDDING_DIMENSION
 
         if self.MILVUS_METRIC_TYPE == "L2" and "voyage" in self.VOYAGEAI_MODEL_NAME:
