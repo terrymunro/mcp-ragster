@@ -24,7 +24,9 @@ class EmbeddingClient:
     def __init__(self):
         logger.info("Attempting to initialize EmbeddingClient for Voyage AI.")
         try:
-            self._voyage_client = httpx.AsyncClient(timeout=settings.HTTP_TIMEOUT_EMBEDDING)
+            self._voyage_client = httpx.AsyncClient(
+                timeout=settings.HTTP_TIMEOUT_EMBEDDING
+            )
             logger.info("Voyage AI embedding client httpx.AsyncClient created.")
 
             # Initialize Redis client for embedding cache

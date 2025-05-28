@@ -1,12 +1,13 @@
-from ragster.config import settings
-from ragster.exceptions import APICallError, PerplexityAPIError
-from ragster.external_apis import logger
-
+import logging
+from typing import Any
 
 import httpx
 
+from ragster.config import settings
+from ragster.exceptions import APICallError, PerplexityAPIError
 
-from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class PerplexityAPIClient:
@@ -30,7 +31,9 @@ class PerplexityAPIClient:
                     settings.PERPLEXITY_CHAT_API_URL, json=payload, headers=headers
                 )
             else:
-                async with httpx.AsyncClient(timeout=settings.HTTP_TIMEOUT_PERPLEXITY) as client:
+                async with httpx.AsyncClient(
+                    timeout=settings.HTTP_TIMEOUT_PERPLEXITY
+                ) as client:
                     response = await client.post(
                         settings.PERPLEXITY_CHAT_API_URL, json=payload, headers=headers
                     )
@@ -73,9 +76,11 @@ class PerplexityAPIClient:
     async def check_fact(self, fact: str) -> str:
         """Fact-check content using Perplexity AI."""
         payload = {
-            "model": "sonar-pro",
+            "model": "sonar",
             "messages": [
-                {"role": "system", "content": """
+                {
+                    "role": "system",
+                    "content": """
 You are a professional fact-checker with extensive research capabilities. Your task is to evaluate claims or articles for factual accuracy. Focus on identifying false, misleading, or unsubstantiated claims.
 
 ## Evaluation Process
@@ -129,9 +134,13 @@ Respond in JSON format with the following structure:
 - MOSTLY_FALSE: Most claims are false or misleading, significantly distorting the facts
 
 Ensure your evaluation is thorough, fair, and focused solely on factual accuracy. Do not allow personal bias to influence your assessment. Be especially rigorous with claims that sound implausible or extraordinary.
-"""},
-                {"role": "user", "content": f"Fact check the following text and identify any false or misleading claims:\n\n{fact}"},
-            ]
+""",
+                },
+                {
+                    "role": "user",
+                    "content": f"Fact check the following text and identify any false or misleading claims:\n\n{fact}",
+                },
+            ],
         }
         return await self._make_request(payload)
 
@@ -140,7 +149,9 @@ Ensure your evaluation is thorough, fair, and focused solely on factual accuracy
         payload = {
             "model": "sonar-pro",
             "messages": [
-                {"role": "system", "content": """You are an expert research assistant with access to real-time web search capabilities. Your task is to conduct comprehensive, in-depth research on any given topic.
+                {
+                    "role": "system",
+                    "content": """You are an expert research assistant with access to real-time web search capabilities. Your task is to conduct comprehensive, in-depth research on any given topic.
 
 ## Research Methodology
 For each topic, you will:
@@ -172,11 +183,15 @@ Organize your research with clear sections:
 - Include relevant technical specifications or parameters
 
 ## Output Format
-Present findings in a well-structured, comprehensive report that balances depth with readability. Use clear headings, bullet points, and logical flow. Aim for thoroughness while maintaining clarity."""},
-                {"role": "user", "content": f"Conduct comprehensive research on: {topic}"},
+Present findings in a well-structured, comprehensive report that balances depth with readability. Use clear headings, bullet points, and logical flow. Aim for thoroughness while maintaining clarity.""",
+                },
+                {
+                    "role": "user",
+                    "content": f"Conduct comprehensive research on: {topic}",
+                },
             ],
             "max_tokens": 4000,
-            "return_related_questions": False,
+            "return_related_questions": True,
             "search_recency_filter": "year",
             "search_domain_filter": ["-reddit.com", "-quora.com"],
         }

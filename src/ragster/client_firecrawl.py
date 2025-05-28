@@ -1,14 +1,17 @@
-from ragster.config import settings
-from firecrawl import FirecrawlApp
-from ragster.exceptions import FirecrawlError
-from ragster.external_apis import logger
-
-
 import asyncio
+import logging
 import time
 from collections import defaultdict
 from typing import Any
 from urllib.parse import urlparse
+
+from firecrawl import FirecrawlApp
+
+from ragster.config import settings
+from ragster.exceptions import FirecrawlError
+
+
+logger = logging.getLogger(__name__)
 
 
 class FirecrawlAPIClient:
@@ -40,39 +43,59 @@ class FirecrawlAPIClient:
             )
 
     async def crawl_url(self, url: str) -> dict[str, Any]:
-        """Crawl a URL using Firecrawl."""
+        """Scrape a single URL using Firecrawl."""
         if not self.client:
             raise FirecrawlError(
                 "Firecrawl client not available. Initialization failed earlier.",
                 status_code=500,
             )
         try:
-            logger.info(f"Crawling URL with Firecrawl: {url}")
-            crawl_result = self.client.crawl_url(
+            logger.info(f"Scraping URL with Firecrawl: {url}")
+            # Use scrape_url for single URL scraping, not crawl_url
+            scrape_result = self.client.scrape_url(
                 url=url,
-                params={"pageOptions": {"onlyMainContent": True, "includeHtml": False}},
+                params={"formats": ["markdown"], "onlyMainContent": True},
             )
-            if not (crawl_result and isinstance(crawl_result, dict)):
+            
+            # Log the result structure for debugging
+            logger.debug(f"Firecrawl scrape result type: {type(scrape_result)}")
+            logger.debug(f"Firecrawl scrape result keys: {list(scrape_result.keys()) if isinstance(scrape_result, dict) else 'Not a dict'}")
+            
+            if not (scrape_result and isinstance(scrape_result, dict)):
                 raise FirecrawlError(
-                    f"Unexpected Firecrawl result format for {url}: {type(crawl_result)}"
+                    f"Unexpected Firecrawl result format for {url}: {type(scrape_result)}"
                 )
 
-            content_key_priority = ["markdown", "content", "data"]
+            # Look for content in order of preference directly from the result
+            content_key_priority = ["markdown", "content", "html"]
             for key in content_key_priority:
-                if key in crawl_result and crawl_result[key]:
-                    return {
-                        "content": crawl_result[key],
-                        "source_url": url,
-                        "type": key,
-                    }
+                if key in scrape_result and scrape_result[key]:
+                    content = scrape_result[key]
+                    if isinstance(content, str) and content.strip():  # Ensure content is non-empty string
+                        return {
+                            "content": content,
+                            "source_url": url,
+                            "type": key,
+                        }
+            
+            # If we get here, no usable content was found
+            available_content_info = []
+            for key in content_key_priority:
+                if key in scrape_result:
+                    value = scrape_result[key]
+                    if isinstance(value, str):
+                        available_content_info.append(f"{key}: {len(value)} chars")
+                    else:
+                        available_content_info.append(f"{key}: {type(value)}")
+            
             raise FirecrawlError(
-                f"Firecrawl result for {url} lacks expected content fields. Result: {str(crawl_result)[:200]}"
+                f"Firecrawl result for {url} has no usable content. Content info: {available_content_info}. All keys: {list(scrape_result.keys())}"
             )
         except Exception as e:
             if isinstance(e, FirecrawlError):
                 raise
             raise FirecrawlError(
-                f"Error crawling URL {url} with Firecrawl: {e}", underlying_error=e
+                f"Error scraping URL {url} with Firecrawl: {e}", underlying_error=e
             )
 
     async def close(self):
@@ -125,7 +148,7 @@ class FirecrawlBatcher:
         return False, None
 
     async def _crawl_with_retry(self, url: str) -> dict[str, Any] | None:
-        """Crawl URL with retry logic."""
+        """Scrape URL with retry logic."""
         attempts = 0
         while attempts < self._max_retries:
             try:
@@ -141,7 +164,7 @@ class FirecrawlBatcher:
                 if attempts >= self._max_retries:
                     self.metrics["failed_crawls"] += 1
                     logger.error(
-                        f"Failed to crawl {url} after {attempts} attempts: {e}"
+                        f"Failed to scrape {url} after {attempts} attempts: {e}"
                     )
                     return None
                 # Exponential backoff
@@ -155,7 +178,7 @@ class FirecrawlBatcher:
     async def crawl_urls(
         self, urls: list[str]
     ) -> list[tuple[str, dict[str, Any] | None]]:
-        """Crawl multiple URLs with domain-based grouping and caching."""
+        """Scrape multiple URLs with domain-based grouping and caching."""
         # Group URLs by domain
         domain_groups = defaultdict(list)
         results: list[tuple[str, dict[str, Any] | None]] = []

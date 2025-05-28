@@ -1,14 +1,15 @@
-from ragster.config import settings
-from ragster.exceptions import APICallError, JinaAPIError
-from ragster.external_apis import logger
-
+import logging
+import pickle
+from typing import Any
 
 import httpx
 import redis.asyncio as redis
 
+from ragster.config import settings
+from ragster.exceptions import APICallError, JinaAPIError
 
-import pickle
-from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class JinaAPIClient:
@@ -39,18 +40,14 @@ class JinaAPIClient:
                 return None
         return None
 
-    async def _cache_set(
-        self, cache_key: str, results: list[dict[str, Any]]
-    ) -> None:
+    async def _cache_set(self, cache_key: str, results: list[dict[str, Any]]) -> None:
         try:
-            await self._redis.set(
-                cache_key, pickle.dumps(results), ex=self._cache_ttl
-            )
+            await self._redis.set(cache_key, pickle.dumps(results), ex=self._cache_ttl)
         except Exception as e:
             logger.warning(f"Failed to set Jina cache in Redis: {e}")
 
     async def search(self, topic: str) -> list[dict[str, Any]]:
-        """Search for content using Jina AI API with caching."""
+        """Search for links using Jina AI API with caching."""
         cache_key = self._get_cache_key(topic)
         cached_results = await self._cache_get(cache_key)
         if cached_results:
@@ -64,19 +61,27 @@ class JinaAPIClient:
             "X-Respond-With": "no-content",
         }
 
-        payload = {
-            "q": topic
-        }
+        payload = {"q": topic}
 
         try:
-            logger.debug(f"Sending Jina search request to {settings.JINA_SEARCH_API_URL} with payload: {payload}")
+            logger.debug(
+                f"Sending Jina search request to {settings.JINA_SEARCH_API_URL} with payload: {payload}"
+            )
             if self.http_client:
-                response = await self.http_client.post(settings.JINA_SEARCH_API_URL, json=payload, headers=headers)
+                response = await self.http_client.post(
+                    settings.JINA_SEARCH_API_URL, json=payload, headers=headers
+                )
             else:
-                async with httpx.AsyncClient(timeout=settings.HTTP_TIMEOUT_JINA) as client:
-                    response = await client.post(settings.JINA_SEARCH_API_URL, json=payload, headers=headers)
+                async with httpx.AsyncClient(
+                    timeout=settings.HTTP_TIMEOUT_JINA
+                ) as client:
+                    response = await client.post(
+                        settings.JINA_SEARCH_API_URL, json=payload, headers=headers
+                    )
 
-            logger.debug(f"Jina response status: {response.status_code}, content-type: {response.headers.get('content-type', 'unknown')}")
+            logger.debug(
+                f"Jina response status: {response.status_code}, content-type: {response.headers.get('content-type', 'unknown')}"
+            )
             if response.status_code != 200:
                 raise APICallError("Jina", response.status_code, response.text[:500])
 
@@ -132,5 +137,5 @@ class JinaAPIClient:
 
     async def close(self):
         """Close Redis connection."""
-        if hasattr(self, '_redis'):
+        if hasattr(self, "_redis"):
             await self._redis.close()

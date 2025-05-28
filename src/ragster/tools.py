@@ -62,9 +62,7 @@ class TopicProcessor:
     async def process_jina_search(self, topic: str) -> list[dict[str, Any]]:
         """Process Jina search and embed snippets."""
         try:
-            jina_results = await self.app_ctx.external_api_client.search_jina(
-                topic
-            )
+            jina_results = await self.app_ctx.jina_client.search(topic)
             self.jina_results_count = len(jina_results)
             logger.info(f"Jina found {self.jina_results_count} results for '{topic}'.")
 
@@ -119,7 +117,7 @@ class TopicProcessor:
     async def perplexity_sub_task(self, topic: str) -> str:
         """Process Perplexity summary."""
         try:
-            summary = await self.app_ctx.external_api_client.query_perplexity(topic)
+            summary = await self.app_ctx.perplexity_client.query(topic)
             embedding = await self.app_ctx.embedding_client.embed_texts(
                 summary, input_type=self.voyage_input_doc_type
             )
@@ -156,9 +154,7 @@ class TopicProcessor:
         """Process Firecrawl URL with semaphore-based concurrency control."""
         async with self.firecrawl_semaphore:
             try:
-                crawled = await self.app_ctx.external_api_client.crawl_url_firecrawl(
-                    url
-                )
+                crawled = await self.app_ctx.firecrawl_client.crawl_url(url)
                 embedding = await self.app_ctx.embedding_client.embed_texts(
                     crawled["content"], input_type=self.voyage_input_doc_type
                 )
@@ -216,7 +212,9 @@ class TopicProcessor:
 
         # Wait for all tasks to complete
         try:
-            results = await asyncio.gather(*task_metadata.keys(), return_exceptions=True)
+            results = await asyncio.gather(
+                *task_metadata.keys(), return_exceptions=True
+            )
             for task, result in zip(task_metadata.keys(), results):
                 task_type, url = task_metadata[task]
                 if isinstance(result, Exception):
@@ -316,8 +314,8 @@ async def query_topic_context(
 
         return QueryTopicResponse(
             query=query_text,
-            results=results_for_response,
-            message=f"Found {len(results_for_response)} relevant documents.",
+            results=document_fragments,
+            message=f"Found {len(document_fragments)} relevant context fragments",
         )
     except MCPError as e:
         logger.error(
@@ -326,8 +324,10 @@ async def query_topic_context(
         )
         raise e
     except Exception as e:
+        full_error = str(e)
         logger.error(
-            f"Unexpected error processing query '{query_text[:100]}...': {e}",
+            f"Unexpected error processing query '{query_text[:100]}...': {full_error}",
             exc_info=True,
         )
-        raise MCPError(f"Query processing failed: {str(e)[:100]}")
+        # Return the full error message for debugging
+        raise MCPError(f"Query processing failed: {full_error}")

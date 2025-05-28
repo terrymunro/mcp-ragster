@@ -16,7 +16,9 @@ from mcp.server.fastmcp import FastMCP
 from .config import settings
 from .embedding_client import EmbeddingClient
 from .milvus_ops import MilvusOperator
-from .external_apis import ExternalAPIClient
+from .client_jina import JinaAPIClient
+from .client_perplexity import PerplexityAPIClient
+from .client_firecrawl import FirecrawlAPIClient
 
 
 logger = logging.getLogger("mcp_rag_server")
@@ -57,7 +59,9 @@ class AppContext(BaseModel):
 
     embedding_client: EmbeddingClient
     milvus_operator: MilvusOperator
-    external_api_client: ExternalAPIClient
+    jina_client: JinaAPIClient
+    perplexity_client: PerplexityAPIClient
+    firecrawl_client: FirecrawlAPIClient
     http_client: httpx.AsyncClient
 
 
@@ -71,21 +75,30 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     try:
         # Create persistent HTTP client with connection pooling first
         clients["http_client"] = httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.HTTP_TIMEOUT_DEFAULT, connect=settings.HTTP_TIMEOUT_CONNECT),
-            limits=httpx.Limits(max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS, max_connections=settings.HTTP_MAX_CONNECTIONS),
+            timeout=httpx.Timeout(
+                settings.HTTP_TIMEOUT_DEFAULT, connect=settings.HTTP_TIMEOUT_CONNECT
+            ),
+            limits=httpx.Limits(
+                max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+                max_connections=settings.HTTP_MAX_CONNECTIONS,
+            ),
         )
 
         clients["embedding_client"] = EmbeddingClient()
         clients["milvus_operator"] = MilvusOperator()
         clients["milvus_operator"].load_collection()
-        clients["external_api_client"] = ExternalAPIClient(
+        clients["jina_client"] = JinaAPIClient(http_client=clients["http_client"])
+        clients["perplexity_client"] = PerplexityAPIClient(
             http_client=clients["http_client"]
         )
+        clients["firecrawl_client"] = FirecrawlAPIClient()
 
         app_ctx = AppContext(
             embedding_client=clients["embedding_client"],
             milvus_operator=clients["milvus_operator"],
-            external_api_client=clients["external_api_client"],
+            jina_client=clients["jina_client"],
+            perplexity_client=clients["perplexity_client"],
+            firecrawl_client=clients["firecrawl_client"],
             http_client=clients["http_client"],
         )
         logger.info("All clients initialized successfully.")
@@ -161,7 +174,9 @@ async def _cleanup_clients(clients: dict[str, Any]) -> None:
     cleanup_order = [
         "http_client",
         "embedding_client",
-        "external_api_client",
+        "jina_client",
+        "perplexity_client",
+        "firecrawl_client",
         "milvus_operator",
     ]
 
