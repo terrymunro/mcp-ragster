@@ -3,7 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 from pydantic import BaseModel
 import httpx
 from importlib.metadata import version, PackageNotFoundError
@@ -143,17 +143,27 @@ async def _perform_index_warmup(app_ctx: AppContext) -> None:
                     query, input_type=voyage_query_type
                 )
                 # When embedding a single string, embed_texts returns list[float]
-                if isinstance(embedding, list) and all(isinstance(x, float) for x in embedding):
+                if isinstance(embedding, list) and all(
+                    isinstance(x, float) for x in embedding
+                ):
                     query_vector = embedding
-                elif isinstance(embedding, list) and len(embedding) > 0 and isinstance(embedding[0], list):
+                elif (
+                    isinstance(embedding, list)
+                    and len(embedding) > 0
+                    and isinstance(embedding[0], list)
+                ):
                     # In case it returns list[list[float]], take the first one
                     query_vector = embedding[0]
                 else:
                     logger.warning(f"Unexpected embedding type: {type(embedding)}")
                     continue
                 # Type assertion to help pyright understand the type
-                assert isinstance(query_vector, list) and all(isinstance(x, float) for x in query_vector)
-                await app_ctx.milvus_operator.query_data(query_vector, top_k=3)  # type: ignore[arg-type]
+                assert isinstance(query_vector, list) and all(
+                    isinstance(x, float) for x in query_vector
+                )
+                await app_ctx.milvus_operator.query_data(
+                    cast(list[float], query_vector), top_k=3
+                )
                 logger.debug(
                     f"Warm-up query {i + 1}/{len(warmup_queries)}: {query[:30]}..."
                 )
