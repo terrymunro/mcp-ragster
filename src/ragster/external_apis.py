@@ -197,13 +197,21 @@ class ExternalAPIClient:
             "Content-Type": "application/json",
             "X-With-Generated-Alt": "true",
         }
-        search_url = f"{settings.JINA_SEARCH_API_URL}?q={topic}&limit={num_results}"
+        search_url = settings.JINA_SEARCH_API_URL
+        params = {"q": topic, "limit": num_results}
+        logger.debug(
+            f"Sending Jina search request to {search_url} with params {params}"
+        )
         try:
             if self.http_client:
-                response = await self.http_client.get(search_url, headers=headers)
+                response = await self.http_client.get(
+                    search_url, headers=headers, params=params
+                )
             else:
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.get(search_url, headers=headers)
+                    response = await client.get(
+                        search_url, headers=headers, params=params
+                    )
 
             if response.status_code != 200:
                 raise APICallError("Jina", response.status_code, response.text[:500])
