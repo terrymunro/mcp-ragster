@@ -6,11 +6,11 @@ from ragster.milvus_ops import MilvusOperator
 class StubEmbeddingClient(EmbeddingClient):
     def __init__(self, return_dim: int = 3):
         # intentionally skip super().__init__ to avoid httpx setup
-        self.embed_texts_calls: list[tuple[object, VoyageInputType | str]] = []
+        self.embed_texts_calls: list[tuple[str | list[str], VoyageInputType | str]] = []
         self.return_dim = return_dim
 
     async def embed_texts(
-        self, texts: object, input_type: VoyageInputType | str
+        self, texts: str | list[str], input_type: VoyageInputType | str
     ):  # type: ignore[override]
         self.embed_texts_calls.append((texts, input_type))
         if isinstance(texts, list):
