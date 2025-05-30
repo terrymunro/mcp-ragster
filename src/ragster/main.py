@@ -1,6 +1,7 @@
 """Main entry point for the MCP RAG Context Server."""
 
 import logging
+from .config import settings
 
 from mcp.server.fastmcp import Context
 

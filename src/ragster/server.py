@@ -4,7 +4,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-from typing import Any, cast
+from typing import Any
 from pydantic import BaseModel
 import httpx
 from importlib.metadata import version, PackageNotFoundError

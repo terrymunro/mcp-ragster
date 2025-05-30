@@ -56,11 +56,13 @@ class FirecrawlAPIClient:
                 url=url,
                 params={"formats": ["markdown"], "onlyMainContent": True},
             )
-            
+
             # Log the result structure for debugging
             logger.debug(f"Firecrawl scrape result type: {type(scrape_result)}")
-            logger.debug(f"Firecrawl scrape result keys: {list(scrape_result.keys()) if isinstance(scrape_result, dict) else 'Not a dict'}")
-            
+            logger.debug(
+                f"Firecrawl scrape result keys: {list(scrape_result.keys()) if isinstance(scrape_result, dict) else 'Not a dict'}"
+            )
+
             if not (scrape_result and isinstance(scrape_result, dict)):
                 raise FirecrawlError(
                     f"Unexpected Firecrawl result format for {url}: {type(scrape_result)}"
@@ -71,13 +73,15 @@ class FirecrawlAPIClient:
             for key in content_key_priority:
                 if key in scrape_result and scrape_result[key]:
                     content = scrape_result[key]
-                    if isinstance(content, str) and content.strip():  # Ensure content is non-empty string
+                    if (
+                        isinstance(content, str) and content.strip()
+                    ):  # Ensure content is non-empty string
                         return {
                             "content": content,
                             "source_url": url,
                             "type": key,
                         }
-            
+
             # If we get here, no usable content was found
             available_content_info = []
             for key in content_key_priority:
@@ -87,7 +91,7 @@ class FirecrawlAPIClient:
                         available_content_info.append(f"{key}: {len(value)} chars")
                     else:
                         available_content_info.append(f"{key}: {type(value)}")
-            
+
             raise FirecrawlError(
                 f"Firecrawl result for {url} has no usable content. Content info: {available_content_info}. All keys: {list(scrape_result.keys())}"
             )

@@ -288,22 +288,22 @@ async def query_topic_context(
         )
         # Ensure we have a single vector for querying
         if (
-            isinstance(query_embedding, list)
-            and len(query_embedding) > 0
-            and isinstance(query_embedding[0], list)
+            isinstance(query_vector, list)
+            and len(query_vector) > 0
+            and isinstance(query_vector[0], list)
         ):
-            query_vector = query_embedding[0]
-        elif isinstance(query_embedding, list) and all(
-            isinstance(x, float) for x in query_embedding
+            query_vector = query_vector[0]
+        elif isinstance(query_vector, list) and all(
+            isinstance(x, float) for x in query_vector
         ):
-            query_vector = query_embedding
+            query_vector = query_vector
         else:
-            raise MCPError(f"Unexpected embedding type: {type(query_embedding)}")
+            raise MCPError(f"Unexpected embedding type: {type(query_vector)}")
 
         assert isinstance(query_vector, list) and all(
             isinstance(x, float) for x in query_vector
         )
-        milvus_results = await app_context.milvus_operator.query_data(
+        milvus_results = app_context.milvus_operator.query_data(
             cast(list[float], query_vector),
             top_k or settings.MILVUS_SEARCH_LIMIT,
             None,
@@ -314,8 +314,8 @@ async def query_topic_context(
 
         return QueryTopicResponse(
             query=query_text,
-            results=document_fragments,
-            message=f"Found {len(document_fragments)} relevant context fragments",
+            results=results_for_response,
+            message=f"Found {len(results_for_response)} relevant context fragments",
         )
     except MCPError as e:
         logger.error(
