@@ -17,7 +17,7 @@ A checklist for converting `research_topic` to support asynchronous operation wi
 
 - [x] **Task 1.1**: Create job management data models (`src/ragster/job_models.py`)
   - JobStatus enum, TopicProgress dataclass, ResearchJob dataclass, JobMetrics dataclass
-- [ ] **Task 1.2**: Implement JobManager class (`src/ragster/job_manager.py`)
+- [x] **Task 1.2**: Implement JobManager class (`src/ragster/job_manager.py`)
   - CRUD operations, thread-safe storage, state transitions, task tracking
 - [ ] **Task 1.3**: Update LoadTopicToolArgs for multi-topic support
   - Change to `topics: list[str]` with validation (1-10 topics), maintain backward compatibility
