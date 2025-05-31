@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from typing import Any, cast
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import settings
 from .models import LoadTopicResponse, QueryTopicResponse, DocumentFragment
@@ -15,9 +15,57 @@ logger = logging.getLogger(__name__)
 
 
 class LoadTopicToolArgs(BaseModel):
-    topic: str = Field(
-        ..., min_length=1, description="The topic to load information about."
+    # Multi-topic support with backward compatibility
+    topics: list[str] = Field(
+        default_factory=list,
+        min_length=1,
+        max_length=settings.MAX_TOPICS_PER_JOB,
+        description="List of topics to research (1-10 topics). For backward compatibility, if 'topic' is provided instead, it will be converted to a single-item list.",
     )
+
+    # Backward compatibility: single topic field
+    topic: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Single topic to research (deprecated, use 'topics' instead).",
+    )
+
+    @field_validator("topics")
+    @classmethod
+    def validate_topics(cls, v: list[str]) -> list[str]:
+        """Validate topics list."""
+        if not v:
+            return v  # Will be handled in model_validator
+
+        # Strip whitespace and filter empty strings
+        cleaned_topics = [topic.strip() for topic in v if topic.strip()]
+
+        if not cleaned_topics:
+            raise ValueError("All topics are empty or contain only whitespace")
+
+        if len(cleaned_topics) > settings.MAX_TOPICS_PER_JOB:
+            raise ValueError(
+                f"Too many topics: {len(cleaned_topics)} > {settings.MAX_TOPICS_PER_JOB}"
+            )
+
+        return cleaned_topics
+
+    @model_validator(mode="after")
+    def ensure_topics_provided(self) -> "LoadTopicToolArgs":
+        """Ensure either topics or topic is provided, with backward compatibility."""
+        if not self.topics and not self.topic:
+            raise ValueError("Either 'topics' list or 'topic' string must be provided")
+
+        # Backward compatibility: convert single topic to topics list
+        if self.topic and not self.topics:
+            self.topics = [self.topic.strip()]
+
+        # If both are provided, topics takes precedence
+        if self.topics and self.topic:
+            # Clear the deprecated field to avoid confusion
+            self.topic = None
+
+        return self
 
 
 class QueryTopicToolArgs(BaseModel):
@@ -246,8 +294,21 @@ async def research_topic(
     args: LoadTopicToolArgs, app_context: AppContext
 ) -> LoadTopicResponse:
     """MCP Tool for performing research and indexing that information for querying."""
-    topic = args.topic
-    logger.info(f"[Tool: research_topic] Processing topic: {topic}")
+    topics = args.topics
+
+    # For backward compatibility and current implementation, process the first topic
+    # TODO: This will be updated in later tasks to handle multiple topics properly
+    topic = topics[0] if topics else ""
+
+    if len(topics) > 1:
+        logger.info(
+            f"[Tool: research_topic] Multi-topic support: Processing {len(topics)} topics sequentially"
+        )
+        logger.info(
+            f"[Tool: research_topic] Note: Currently processing only first topic '{topic}'. Full multi-topic processing will be implemented in background tasks."
+        )
+    else:
+        logger.info(f"[Tool: research_topic] Processing single topic: {topic}")
 
     processor = TopicProcessor(app_context)
     jina_results = await processor.process_jina_search(topic)
