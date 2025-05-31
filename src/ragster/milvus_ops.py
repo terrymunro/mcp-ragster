@@ -1,6 +1,5 @@
 import logging
 from typing import Any, cast
-from collections.abc import Sequence
 
 from pymilvus import (
     MilvusClient,
@@ -231,7 +230,9 @@ class MilvusOperator:
                 output_fields=output_fields,
                 consistency_level="Strong",
             )
-            results_seq = cast(Sequence[Any], results)
+            results_seq = cast(
+              
+          [Any], results)
             processed = []
             try:
                 # Handle different result types from Milvus search
@@ -239,7 +240,11 @@ class MilvusOperator:
                     # Try to access the first result set
                     first_result = None
                     try:
-                        first_result = results_seq[0]
+                        first_result = (
+                            cast(list[Any], results)[0]
+                            if hasattr(results, "__getitem__")
+                            else None
+                        )
                     except (IndexError, TypeError):
                         first_result = None
 

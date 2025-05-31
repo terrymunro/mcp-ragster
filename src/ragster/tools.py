@@ -288,26 +288,20 @@ async def query_topic_context(
         )
         # Ensure we have a single vector for querying
         if (
-            isinstance(query_vector, list)
-            and len(query_vector) > 0
-            and isinstance(query_vector[0], list)
+            isinstance(query_embedding, list)
+            and len(query_embedding) > 0
+            and isinstance(query_embedding[0], list)
         ):
-            query_vector = query_vector[0]
-        elif isinstance(query_vector, list) and all(
-            isinstance(x, float) for x in query_vector
+            query_vector = cast(list[float], query_embedding[0])
+        elif isinstance(query_embedding, list) and all(
+            isinstance(x, float) for x in query_embedding
         ):
-            query_vector = query_vector
+            query_vector = cast(list[float], query_embedding)
         else:
-            raise MCPError(f"Unexpected embedding type: {type(query_vector)}")
+            raise MCPError(f"Unexpected embedding type: {type(query_embedding)}")
 
-        assert isinstance(query_vector, list) and all(
-            isinstance(x, float) for x in query_vector
-        )
-        milvus_results = app_context.milvus_operator.query_data(
-            cast(list[float], query_vector),
-            top_k or settings.MILVUS_SEARCH_LIMIT,
-            None,
-            search_ef,
+        milvus_results = await app_context.milvus_operator.query_data(
+            query_vector, top_k or settings.MILVUS_SEARCH_LIMIT, None, search_ef
         )
 
         results_for_response = [DocumentFragment(**res) for res in milvus_results]

@@ -92,6 +92,7 @@ class Settings:
 
     # Caching settings
     JINA_CACHE_TTL_HOURS: int = int(os.getenv("JINA_CACHE_TTL_HOURS", 3))
+    EMBEDDING_CACHE_SIZE: int = int(os.getenv("EMBEDDING_CACHE_SIZE", 1000))
     ENABLE_INDEX_WARMUP: bool = (
         os.getenv("ENABLE_INDEX_WARMUP", "True").lower() == "true"
     )
@@ -143,21 +144,12 @@ class Settings:
             raise ConfigurationError(
                 "Either FIRECRAWL_API_URL or FIRECRAWL_API_KEY must be set."
             )
-
-        # Initialize EMBEDDING_DIMENSION from environment or use fallback
-        embedding_dim_env = os.getenv("EMBEDDING_DIMENSION")
-        self.EMBEDDING_DIMENSION: int = (
-            int(embedding_dim_env) if embedding_dim_env else 0
-        )
-
         if not self.EMBEDDING_DIMENSION:
-            known_dim = KNOWN_VOYAGE_MODEL_DIMS.get(self.VOYAGEAI_MODEL_NAME)
-            if known_dim is None:
-                raise ConfigurationError(
-                    f"EMBEDDING_DIMENSION not set and model '{self.VOYAGEAI_MODEL_NAME}' not in known models. "
-                    f"Please set EMBEDDING_DIMENSION in environment variables."
+            self.EMBEDDING_DIMENSION = int(
+                KNOWN_VOYAGE_MODEL_DIMS.get(
+                    self.VOYAGEAI_MODEL_NAME, self.EMBEDDING_DIMENSION
                 )
-            self.EMBEDDING_DIMENSION = known_dim
+            )
         self.MILVUS_VECTOR_DIMENSION = self.EMBEDDING_DIMENSION
 
         if self.MILVUS_METRIC_TYPE == "L2" and "voyage" in self.VOYAGEAI_MODEL_NAME:
