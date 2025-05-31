@@ -62,9 +62,7 @@ class TopicProcessor:
     async def process_jina_search(self, topic: str) -> list[dict[str, Any]]:
         """Process Jina search and embed snippets."""
         try:
-            jina_results = await self.app_ctx.external_api_client.search_jina(
-                topic, num_results=settings.JINA_SEARCH_LIMIT
-            )
+            jina_results = await self.app_ctx.jina_client.search(topic)
             self.jina_results_count = len(jina_results)
             logger.info(f"Jina found {self.jina_results_count} results for '{topic}'.")
 
@@ -114,19 +112,19 @@ class TopicProcessor:
                 for i, meta in enumerate(jina_metadata)
             ]
 
-            await self.app_ctx.milvus_operator.insert_data(data_to_insert)
+            self.app_ctx.milvus_operator.insert_data(data_to_insert)
 
     async def perplexity_sub_task(self, topic: str) -> str:
         """Process Perplexity summary."""
         try:
-            summary = await self.app_ctx.external_api_client.query_perplexity(topic)
+            summary = await self.app_ctx.perplexity_client.query(topic)
             embedding = await self.app_ctx.embedding_client.embed_texts(
                 summary, input_type=self.voyage_input_doc_type
             )
-            await self.app_ctx.milvus_operator.insert_data(
+            self.app_ctx.milvus_operator.insert_data(
                 [
                     {
-                        settings.MILVUS_INDEX_FIELD_NAME: embedding,
+                        settings.MILVUS_INDEX_FIELD_NAME: embedding[0],
                         settings.MILVUS_TEXT_FIELD_NAME: summary,
                         settings.MILVUS_TOPIC_FIELD_NAME: topic,
                         settings.MILVUS_SOURCE_TYPE_FIELD_NAME: "perplexity",
@@ -156,16 +154,14 @@ class TopicProcessor:
         """Process Firecrawl URL with semaphore-based concurrency control."""
         async with self.firecrawl_semaphore:
             try:
-                crawled = await self.app_ctx.external_api_client.crawl_url_firecrawl(
-                    url
-                )
+                crawled = await self.app_ctx.firecrawl_client.crawl_url(url)
                 embedding = await self.app_ctx.embedding_client.embed_texts(
                     crawled["content"], input_type=self.voyage_input_doc_type
                 )
-                await self.app_ctx.milvus_operator.insert_data(
+                self.app_ctx.milvus_operator.insert_data(
                     [
                         {
-                            settings.MILVUS_INDEX_FIELD_NAME: embedding,
+                            settings.MILVUS_INDEX_FIELD_NAME: embedding[0],
                             settings.MILVUS_TEXT_FIELD_NAME: crawled["content"],
                             settings.MILVUS_TOPIC_FIELD_NAME: topic,
                             settings.MILVUS_SOURCE_TYPE_FIELD_NAME: "firecrawl",
@@ -214,14 +210,19 @@ class TopicProcessor:
         if not task_metadata:
             return
 
-        # Process results as they complete
-        for completed_task in asyncio.as_completed(task_metadata.keys()):
-            task_type, url = task_metadata[completed_task]
-            try:
-                result = await completed_task
-                logger.info(f"Task completed ({task_type}): {result}")
-            except Exception as e:
-                logger.error(f"Task failed ({task_type}, {url}): {str(e)}")
+        # Wait for all tasks to complete
+        try:
+            results = await asyncio.gather(
+                *task_metadata.keys(), return_exceptions=True
+            )
+            for task, result in zip(task_metadata.keys(), results):
+                task_type, url = task_metadata[task]
+                if isinstance(result, Exception):
+                    logger.error(f"Task failed ({task_type}, {url}): {str(result)}")
+                else:
+                    logger.info(f"Task completed ({task_type}): {result}")
+        except Exception as e:
+            logger.error(f"Error in concurrent task processing: {e}")
 
     def build_response(self, topic: str) -> LoadTopicResponse:
         """Build the final response."""
@@ -249,8 +250,6 @@ async def load_topic_context(
     logger.info(f"[Tool: load_topic_context] Processing topic: {topic}")
 
     processor = TopicProcessor(app_context)
-
-    # Process Jina search and embed snippets
     jina_results = await processor.process_jina_search(topic)
 
     # Process concurrent tasks (Perplexity + Firecrawl)
@@ -284,7 +283,7 @@ async def query_topic_context(
     )
 
     try:
-        query_embedding = await app_context.embedding_client.embed_texts(
+        query_vector = await app_context.embedding_client.embed_texts(
             query_text, input_type=voyage_input_query_type
         )
         # Ensure we have a single vector for querying
@@ -310,7 +309,7 @@ async def query_topic_context(
         return QueryTopicResponse(
             query=query_text,
             results=results_for_response,
-            message=f"Found {len(results_for_response)} relevant documents.",
+            message=f"Found {len(results_for_response)} relevant context fragments",
         )
     except MCPError as e:
         logger.error(
@@ -319,8 +318,10 @@ async def query_topic_context(
         )
         raise e
     except Exception as e:
+        full_error = str(e)
         logger.error(
-            f"Unexpected error processing query '{query_text[:100]}...': {e}",
+            f"Unexpected error processing query '{query_text[:100]}...': {full_error}",
             exc_info=True,
         )
-        raise MCPError(f"Query processing failed: {str(e)[:100]}")
+        # Return the full error message for debugging
+        raise MCPError(f"Query processing failed: {full_error}")

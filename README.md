@@ -193,3 +193,17 @@ Search the indexed information using natural language.
 - The server will automatically handle embedding dimension matching for known Voyage AI models
 - Content is stored persistently in Milvus, so you can query topics multiple times without reloading
 - Failed API calls are handled gracefully with appropriate error messages
+
+## Testing
+
+Run the test suite using `uv` and `pytest`:
+
+```bash
+uv run pytest
+```
+
+## Documentation
+
+- https://docs.jina.ai/
+- https://docs.perplexity.ai/home
+- https://milvus.io/api-reference/pymilvus/v2.5.x/About.md

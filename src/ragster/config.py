@@ -35,20 +35,13 @@ class Settings:
     )
     VOYAGEAI_INPUT_TYPE_QUERY: str = os.getenv("VOYAGEAI_INPUT_TYPE_QUERY", "query")
 
-    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", 1024))
+    # Redis Configuration
+    REDIS_URI: str = os.getenv("REDIS_URI", "redis://localhost:6379")
 
     # Milvus Configuration
-    MILVUS_ALIAS: str = os.getenv("MILVUS_ALIAS", "default")
-    MILVUS_HOST: str = os.getenv("MILVUS_HOST", "localhost")
-    MILVUS_PORT: str = os.getenv("MILVUS_PORT", "19530")
-    MILVUS_USER: str | None = os.getenv("MILVUS_USER")
-    MILVUS_PASSWORD: str | None = os.getenv("MILVUS_PASSWORD")
-    MILVUS_USE_SSL: bool = os.getenv("MILVUS_USE_SSL", "False").lower() == "true"
-    MILVUS_SERVER_PEM_PATH: str | None = os.getenv("MILVUS_SERVER_PEM_PATH")
-    MILVUS_SERVER_NAME: str | None = os.getenv("MILVUS_SERVER_NAME")
-    MILVUS_CA_CERT_PATH: str | None = os.getenv("MILVUS_CA_CERT_PATH")
-    MILVUS_CLIENT_KEY_PATH: str | None = os.getenv("MILVUS_CLIENT_KEY_PATH")
-    MILVUS_CLIENT_PEM_PATH: str | None = os.getenv("MILVUS_CLIENT_PEM_PATH")
+    MILVUS_DB: str = os.getenv("MILVUS_DB", "default")
+    MILVUS_URI: str = os.getenv("MILVUS_URI", "localhost")
+    MILVUS_TOKEN: str | None = os.getenv("MILVUS_TOKEN")
 
     # Firecrawl Configuration
     FIRECRAWL_API_URL: str | None = os.getenv("FIRECRAWL_API_URL")
@@ -77,14 +70,12 @@ class Settings:
     )
     MILVUS_METRIC_TYPE: str = os.getenv("MILVUS_METRIC_TYPE", "IP")
     MILVUS_INDEX_TYPE: str = os.getenv("MILVUS_INDEX_TYPE", "HNSW")
-
     # Milvus Index Parameters (examples for HNSW and IVF_FLAT)
     MILVUS_HNSW_M: int = int(os.getenv("MILVUS_HNSW_M", 32))
     MILVUS_HNSW_EF_CONSTRUCTION: int = int(
         os.getenv("MILVUS_HNSW_EF_CONSTRUCTION", 400)
     )
     MILVUS_IVF_NLIST: int = int(os.getenv("MILVUS_IVF_NLIST", 1024))
-
     # Milvus Search Parameters
     MILVUS_SEARCH_EF: int = int(os.getenv("MILVUS_SEARCH_EF", 64))
     MILVUS_SEARCH_EF_EXPLORATION: int = int(
@@ -107,8 +98,38 @@ class Settings:
     )
 
     # API Endpoints
-    JINA_SEARCH_API_URL: str = "https://s.jina.ai/search"
-    PERPLEXITY_CHAT_API_URL: str = "https://api.perplexity.ai/chat/completions"
+    JINA_SEARCH_API_URL: str = os.getenv("JINA_SEARCH_API_URL", "https://s.jina.ai")
+    PERPLEXITY_CHAT_API_URL: str = os.getenv(
+        "PERPLEXITY_CHAT_API_URL", "https://api.perplexity.ai/chat/completions"
+    )
+
+    # HTTP Client Configuration
+    HTTP_TIMEOUT_DEFAULT: float = float(os.getenv("HTTP_TIMEOUT_DEFAULT", 30.0))
+    HTTP_TIMEOUT_CONNECT: float = float(os.getenv("HTTP_TIMEOUT_CONNECT", 10.0))
+    HTTP_TIMEOUT_PERPLEXITY: float = float(os.getenv("HTTP_TIMEOUT_PERPLEXITY", 60.0))
+    HTTP_TIMEOUT_JINA: float = float(os.getenv("HTTP_TIMEOUT_JINA", 30.0))
+    HTTP_TIMEOUT_EMBEDDING: float = float(os.getenv("HTTP_TIMEOUT_EMBEDDING", 30.0))
+
+    # HTTP Connection Pool Settings
+    HTTP_MAX_KEEPALIVE_CONNECTIONS: int = int(
+        os.getenv("HTTP_MAX_KEEPALIVE_CONNECTIONS", 20)
+    )
+    HTTP_MAX_CONNECTIONS: int = int(os.getenv("HTTP_MAX_CONNECTIONS", 100))
+
+    # Cache TTL Settings (in seconds)
+    EMBEDDING_CACHE_TTL_SECONDS: int = int(
+        os.getenv("EMBEDDING_CACHE_TTL_SECONDS", 86400)
+    )  # 24 hours
+    FIRECRAWL_CACHE_TTL_SECONDS: int = int(
+        os.getenv("FIRECRAWL_CACHE_TTL_SECONDS", 3600)
+    )  # 1 hour
+
+    # Retry Configuration for Firecrawl
+    FIRECRAWL_MAX_RETRIES: int = int(os.getenv("FIRECRAWL_MAX_RETRIES", 3))
+    FIRECRAWL_BASE_BACKOFF: float = float(os.getenv("FIRECRAWL_BASE_BACKOFF", 2.0))
+    FIRECRAWL_SAME_DOMAIN_DELAY: float = float(
+        os.getenv("FIRECRAWL_SAME_DOMAIN_DELAY", 0.5)
+    )
 
     def __init__(self):
         if not self.VOYAGEAI_API_KEY:

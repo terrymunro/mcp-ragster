@@ -3,18 +3,11 @@ import logging
 from typing import Literal, TypeGuard
 
 import httpx
+import redis.asyncio as redis
+import pickle
 
-if __package__:
-    from .config import settings
-    from .exceptions import APICallError, EmbeddingServiceError
-else:
-    import sys
-    from pathlib import Path
-
-    project_root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(project_root))
-    from ragster.config import settings
-    from ragster.exceptions import APICallError, EmbeddingServiceError
+from .config import settings
+from .exceptions import APICallError, EmbeddingServiceError
 
 
 logger = logging.getLogger(__name__)
@@ -30,20 +23,21 @@ class EmbeddingClient:
 
     def __init__(self):
         logger.info("Attempting to initialize EmbeddingClient for Voyage AI.")
-        # VOYAGEAI_API_KEY presence is guaranteed by config.py
         try:
-            # Create the client during initialization of this instance
-            # This will be called once by the lifespan manager
-            self._voyage_client = httpx.AsyncClient(timeout=30.0)
+            self._voyage_client = httpx.AsyncClient(
+                timeout=settings.HTTP_TIMEOUT_EMBEDDING
+            )
             logger.info("Voyage AI embedding client httpx.AsyncClient created.")
 
-            # Initialize LRU cache for embeddings
-            self._embedding_cache = {}
-            self._cache_size = settings.EMBEDDING_CACHE_SIZE
-            logger.info(f"Embedding cache initialized with size {self._cache_size}")
+            # Initialize Redis client for embedding cache
+            self._redis = redis.from_url(settings.REDIS_URI, decode_responses=False)
+            self._cache_ttl = settings.EMBEDDING_CACHE_TTL_SECONDS
+            logger.info(
+                f"Embedding cache using Redis at {settings.REDIS_URI} with TTL {self._cache_ttl}s"
+            )
         except Exception as e:
             logger.critical(
-                f"Failed to initialize httpx.AsyncClient for Voyage AI: {e}",
+                f"Failed to initialize httpx.AsyncClient or Redis for Voyage AI: {e}",
                 exc_info=True,
             )
             raise EmbeddingServiceError(
@@ -55,29 +49,31 @@ class EmbeddingClient:
         return settings.EMBEDDING_DIMENSION
 
     def _get_cache_key(self, text: str, input_type: VoyageInputType) -> str:
-        """Generate cache key for embedding."""
         content = f"{text}:{input_type}:{settings.VOYAGEAI_MODEL_NAME}"
-        return hashlib.md5(content.encode()).hexdigest()
+        return f"emb:{hashlib.md5(content.encode()).hexdigest()}"
 
-    def _cache_get(self, cache_key: str) -> list[float] | None:
-        """Get embedding from cache."""
-        return self._embedding_cache.get(cache_key)
+    async def _cache_get(self, cache_key: str) -> list[float] | None:
+        val = await self._redis.get(cache_key)
+        if val is not None:
+            try:
+                return pickle.loads(val)
+            except Exception as e:
+                logger.warning(f"Failed to unpickle embedding from Redis: {e}")
+                return None
+        return None
 
-    def _cache_set(self, cache_key: str, embedding: list[float]) -> None:
-        """Set embedding in cache with LRU eviction."""
-        if len(self._embedding_cache) >= self._cache_size:
-            # Remove oldest item (FIFO approximation of LRU)
-            oldest_key = next(iter(self._embedding_cache))
-            del self._embedding_cache[oldest_key]
-        self._embedding_cache[cache_key] = embedding
+    async def _cache_set(self, cache_key: str, embedding: list[float]) -> None:
+        try:
+            await self._redis.set(
+                cache_key, pickle.dumps(embedding), ex=self._cache_ttl
+            )
+        except Exception as e:
+            logger.warning(f"Failed to set embedding in Redis: {e}")
 
     async def embed_texts(
         self, texts: str | list[str], input_type: VoyageInputType
-    ) -> list[float] | list[list[float]]:
+    ) -> list[list[float]]:
         if not self._voyage_client or self._voyage_client.is_closed:
-            logger.error(
-                "Voyage AI client is not available (not initialized or closed)."
-            )
             raise EmbeddingServiceError(
                 "Voyage AI client is not available (not initialized or closed)."
             )
@@ -87,14 +83,6 @@ class EmbeddingClient:
             logger.warning("embed_texts called with empty input list.")
             return []
 
-        # Check cache for single text queries
-        if isinstance(texts, str):
-            cache_key = self._get_cache_key(texts, input_type)
-            cached_embedding = self._cache_get(cache_key)
-            if cached_embedding:
-                logger.debug(f"Cache hit for embedding: {texts[:50]}...")
-                return cached_embedding
-
         # Check cache for multiple texts
         cached_results = []
         uncached_texts = []
@@ -102,7 +90,7 @@ class EmbeddingClient:
 
         for i, text in enumerate(input_texts_list):
             cache_key = self._get_cache_key(text, input_type)
-            cached_embedding = self._cache_get(cache_key)
+            cached_embedding = await self._cache_get(cache_key)
             if cached_embedding:
                 cached_results.append((i, cached_embedding))
             else:
@@ -111,11 +99,11 @@ class EmbeddingClient:
 
         # If all texts are cached
         if not uncached_texts:
-            logger.debug(f"All {len(input_texts_list)} embeddings found in cache")
+            logger.debug(f"Embeddings ({len(input_texts_list)}) found in cache")
             embeddings: list[list[float]] = [[] for _ in range(len(input_texts_list))]
             for i, embedding in cached_results:
                 embeddings[i] = embedding
-            return embeddings[0] if isinstance(texts, str) else embeddings
+            return embeddings
 
         # Make API call for uncached texts
         headers = {
@@ -169,13 +157,12 @@ class EmbeddingClient:
             # Cache new embeddings
             for text, embedding in zip(uncached_texts, new_embeddings):
                 cache_key = self._get_cache_key(text, input_type)
-                self._cache_set(cache_key, embedding)
+                await self._cache_set(cache_key, embedding)
 
             # Combine cached and new results
-            if isinstance(texts, str):
-                return new_embeddings[0]
-
-            all_embeddings: list[list[float]] = [[] for _ in range(len(input_texts_list))]
+            all_embeddings: list[list[float]] = [
+                [] for _ in range(len(input_texts_list))
+            ]
             for i, embedding in cached_results:
                 all_embeddings[i] = embedding
             for i, embedding in zip(uncached_indices, new_embeddings):
