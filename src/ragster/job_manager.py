@@ -267,7 +267,7 @@ class JobManager:
 
             return CancelJobResponse(
                 job_id=job_id,
-                status=job.status,
+                status=job.status.value,
                 message=f"Job cancelled from {old_status} status",
                 preserved_results=preserved_results,
             )

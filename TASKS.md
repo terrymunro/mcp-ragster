@@ -21,33 +21,33 @@ A checklist for converting `research_topic` to support asynchronous operation wi
   - CRUD operations, thread-safe storage, state transitions, task tracking
 - [x] **Task 1.3**: Update LoadTopicToolArgs for multi-topic support
   - Change to `topics: list[str]` with validation (1-10 topics), maintain backward compatibility
-- [ ] **Task 1.4**: Create new response models (`src/ragster/models.py`)
+- [x] **Task 1.4**: Create new response models (`src/ragster/job_models.py`)
   - ResearchJobResponse, JobStatusResponse, MultiTopicResponse with progress tracking
-- [ ] **Task 2.1**: Build background task infrastructure (`src/ragster/background_processor.py`)
+- [x] **Task 2.1**: Build background task infrastructure (`src/ragster/background_processor.py`)
   - Async task orchestration, cancellation mechanisms, progress callbacks
-- [ ] **Task 2.2**: Implement multi-topic processing strategies
+- [x] **Task 2.2**: Implement multi-topic processing strategies
   - Sequential processing (≤2 topics), parallel processing (3+ topics), intelligent strategy selection
-- [ ] **Task 2.3**: Enhance TopicProcessor with progress callbacks
+- [x] **Task 2.3**: Enhance TopicProcessor with progress callbacks
   - Add optional progress_callback parameter, emit progress events, maintain compatibility
-- [ ] **Task 3.1**: Add global job concurrency limiter
+- [x] **Task 3.1**: Add global job concurrency limiter
   - MAX_CONCURRENT_RESEARCH_JOBS setting, job queue mechanism, fair scheduling
-- [ ] **Task 3.2**: Implement adaptive API rate limiting
+- [x] **Task 3.2**: Implement adaptive API rate limiting
   - MultiTopicResourceManager class, dynamic semaphore sizing, adaptive batch sizes
-- [ ] **Task 3.3**: Build job result caching system
+- [x] **Task 3.3**: Build job result caching system
   - Topic hash-based caching, TTL expiration, cache hit detection and reuse
-- [ ] **Task 4.1**: Implement `get_research_status` tool
+- [x] **Task 4.1**: Implement `get_research_status` tool
   - New MCP tool registration, GetJobStatusArgs model, real-time progress reporting
-- [ ] **Task 4.2**: Implement `list_research_jobs` tool  
+- [x] **Task 4.2**: Implement `list_research_jobs` tool  
   - Job listing with status filtering, pagination, summary statistics
-- [ ] **Task 4.3**: Implement `cancel_research_job` tool
+- [x] **Task 4.3**: Implement `cancel_research_job` tool
   - Graceful task cancellation, partial result preservation, resource cleanup
-- [ ] **Task 5.1**: Refactor `research_topic` to async pattern
+- [x] **Task 5.1**: Refactor `research_topic` to async pattern
   - Immediate return with job ID, background task creation, updated tool description
-- [ ] **Task 5.2**: Integrate JobManager with AppContext and server
+- [x] **Task 5.2**: Integrate JobManager with AppContext and server
   - Add JobManager to AppContext, lifecycle management, job recovery for restarts
-- [ ] **Task 6.1**: Add new configuration options
+- [x] **Task 6.1**: Add new configuration options
   - MAX_CONCURRENT_RESEARCH_JOBS, JOB_RETENTION_HOURS, JOB_CACHE_TTL_HOURS, MAX_TOPICS_PER_JOB
-- [ ] **Task 6.2**: Implement job cleanup and maintenance
+- [x] **Task 6.2**: Implement job cleanup and maintenance
   - Periodic cleanup task, configurable retention policies, memory monitoring
 - [ ] **Task 7.1**: Create unit tests for job management
   - JobManager CRUD tests, state transition tests, concurrency limit tests

@@ -19,6 +19,10 @@ from .milvus_ops import MilvusOperator
 from .client_jina import JinaAPIClient
 from .client_perplexity import PerplexityAPIClient
 from .client_firecrawl import FirecrawlAPIClient
+from .job_manager import JobManager
+from .background_processor import BackgroundTaskProcessor
+from .resource_manager import MultiTopicResourceManager
+from .result_cache import TopicResultCache
 
 
 logger = logging.getLogger("mcp_rag_server")
@@ -63,6 +67,10 @@ class AppContext(BaseModel):
     perplexity_client: PerplexityAPIClient
     firecrawl_client: FirecrawlAPIClient
     http_client: httpx.AsyncClient
+    job_manager: JobManager
+    background_processor: BackgroundTaskProcessor
+    resource_manager: MultiTopicResourceManager
+    result_cache: TopicResultCache
 
 
 @asynccontextmanager
@@ -93,6 +101,16 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         )
         clients["firecrawl_client"] = FirecrawlAPIClient()
 
+        # Initialize job management components
+        clients["job_manager"] = JobManager()
+        clients["background_processor"] = BackgroundTaskProcessor(
+            clients["job_manager"]
+        )
+        clients["resource_manager"] = MultiTopicResourceManager()
+        clients["result_cache"] = TopicResultCache(
+            max_size=100, ttl_hours=settings.JOB_CACHE_TTL_HOURS
+        )
+
         app_ctx = AppContext(
             embedding_client=clients["embedding_client"],
             milvus_operator=clients["milvus_operator"],
@@ -100,8 +118,16 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
             perplexity_client=clients["perplexity_client"],
             firecrawl_client=clients["firecrawl_client"],
             http_client=clients["http_client"],
+            job_manager=clients["job_manager"],
+            background_processor=clients["background_processor"],
+            resource_manager=clients["resource_manager"],
+            result_cache=clients["result_cache"],
         )
         logger.info("All clients initialized successfully.")
+
+        # Start lifecycle services
+        await app_ctx.job_manager.start()
+        await app_ctx.result_cache.start()
 
         # Perform index warm-up if enabled and data exists
         if settings.ENABLE_INDEX_WARMUP:
@@ -118,6 +144,28 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 
     finally:
         logger.info("MCP Server lifespan shutdown: Cleaning up clients...")
+
+        # Shutdown background processor first
+        if "background_processor" in clients:
+            try:
+                await clients["background_processor"].shutdown()
+            except Exception as e:
+                logger.error(f"Error shutting down background processor: {e}")
+
+        # Shutdown job manager
+        if "job_manager" in clients:
+            try:
+                await clients["job_manager"].stop()
+            except Exception as e:
+                logger.error(f"Error shutting down job manager: {e}")
+
+        # Shutdown result cache
+        if "result_cache" in clients:
+            try:
+                await clients["result_cache"].stop()
+            except Exception as e:
+                logger.error(f"Error shutting down result cache: {e}")
+
         await _cleanup_clients(clients)
         logger.info("Client cleanup complete.")
 
@@ -178,6 +226,8 @@ async def _cleanup_clients(clients: dict[str, Any]) -> None:
         "perplexity_client",
         "firecrawl_client",
         "milvus_operator",
+        "job_manager",
+        "background_processor",
     ]
 
     for client_name in cleanup_order:

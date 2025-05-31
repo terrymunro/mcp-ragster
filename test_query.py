@@ -50,6 +50,18 @@ async def test_query():
         perplexity_client = PerplexityAPIClient(http_client=http_client)
         firecrawl_client = FirecrawlAPIClient()
 
+        # Import new required components
+        from ragster.job_manager import JobManager
+        from ragster.background_processor import BackgroundTaskProcessor
+        from ragster.resource_manager import MultiTopicResourceManager
+        from ragster.result_cache import TopicResultCache
+
+        # Initialize new components
+        job_manager = JobManager()
+        background_processor = BackgroundTaskProcessor(job_manager)
+        resource_manager = MultiTopicResourceManager()
+        result_cache = TopicResultCache()
+
         app_context = AppContext(
             embedding_client=embedding_client,
             milvus_operator=milvus_operator,
@@ -57,6 +69,10 @@ async def test_query():
             perplexity_client=perplexity_client,
             firecrawl_client=firecrawl_client,
             http_client=http_client,
+            job_manager=job_manager,
+            background_processor=background_processor,
+            resource_manager=resource_manager,
+            result_cache=result_cache,
         )
 
         # Test query

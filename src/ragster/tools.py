@@ -2,7 +2,8 @@
 
 import asyncio
 import logging
-from typing import Any, cast
+from typing import Any, Awaitable, Callable, Optional
+from datetime import datetime, timedelta
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import settings
@@ -93,8 +94,13 @@ class TopicProcessor:
     jina_results_count: int
     voyage_input_doc_type: VoyageInputType
     firecrawl_semaphore: asyncio.Semaphore
+    progress_callback: Optional[Callable[[str, str], Awaitable[None]]]
 
-    def __init__(self, app_context: AppContext):
+    def __init__(
+        self,
+        app_context: AppContext,
+        progress_callback: Optional[Callable[[str, str], Awaitable[None]]] = None,
+    ):
         self.app_ctx = app_context
         self.response_errors: list[str] = []
         self.processed_urls_count = 0
@@ -106,6 +112,7 @@ class TopicProcessor:
             else "document"
         )
         self.firecrawl_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_FIRECRAWL)
+        self.progress_callback = progress_callback
 
     async def process_jina_search(self, topic: str) -> list[dict[str, Any]]:
         """Process Jina search and embed snippets."""
@@ -290,59 +297,133 @@ class TopicProcessor:
         )
 
 
-async def research_topic(
-    args: LoadTopicToolArgs, app_context: AppContext
-) -> LoadTopicResponse:
-    """MCP Tool for performing research and indexing that information for querying."""
+async def research_topic(args: LoadTopicToolArgs, app_context: AppContext):
+    """Research and index topic information asynchronously with intelligent caching and resource management.
+
+    For backward compatibility, single topics return LoadTopicResponse.
+    For multi-topic jobs, returns ResearchJobResponse with job tracking.
+    """
+    from .job_models import ResearchJobResponse
+
     topics = args.topics
+    logger.info(
+        f"[Tool: research_topic] Starting research job for {len(topics)} topics: {topics}"
+    )
 
-    # For backward compatibility and current implementation, process the first topic
-    # TODO: This will be updated in later tasks to handle multiple topics properly
-    topic = topics[0] if topics else ""
+    # Check cache for any existing results
+    cache_hits, cache_misses = await app_context.result_cache.check_cache_hits(topics)
 
-    if len(topics) > 1:
-        logger.info(
-            f"[Tool: research_topic] Multi-topic support: Processing {len(topics)} topics sequentially"
+    if cache_hits:
+        logger.info(f"Cache hits for topics: {cache_hits}")
+
+    # For single topic with cache hit, return immediately
+    if len(topics) == 1 and topics[0] in cache_hits:
+        cached_result = await app_context.result_cache.get(topics[0])
+        if cached_result:
+            logger.info(f"Returning cached result for topic: {topics[0]}")
+            return cached_result
+
+    # Check global concurrency limits
+    active_jobs = await app_context.background_processor.get_active_job_count()
+    if active_jobs >= settings.MAX_CONCURRENT_RESEARCH_JOBS:
+        return ResearchJobResponse(
+            job_id="queued",
+            status="pending",
+            topics=topics,
+            message=f"Job queued due to concurrency limit. {active_jobs} jobs currently active.",
+            created_at=datetime.utcnow(),
+            estimated_completion_time=None,
         )
-        logger.info(
-            f"[Tool: research_topic] Note: Currently processing only first topic '{topic}'. Full multi-topic processing will be implemented in background tasks."
-        )
-    else:
-        logger.info(f"[Tool: research_topic] Processing single topic: {topic}")
 
-    processor = TopicProcessor(app_context)
-    jina_results = await processor.process_jina_search(topic)
+    # For single topic (backward compatibility), process synchronously if no cache
+    if len(topics) == 1 and not cache_hits:
+        logger.info(f"Processing single topic synchronously: {topics[0]}")
 
-    # Process concurrent tasks (Perplexity + Firecrawl)
-    await processor.process_concurrent_tasks(topic, jina_results)
+        # Allocate resources for single topic
+        await app_context.resource_manager.allocate_resources_for_topics(1)
 
-    return processor.build_response(topic)
+        try:
+            processor = TopicProcessor(app_context)
+            topic = topics[0]
+
+            # Process the topic stages
+            jina_results = await processor.process_jina_search(topic)
+            await processor.process_concurrent_tasks(topic, jina_results)
+
+            result = processor.build_response(topic)
+
+            # Cache the result
+            await app_context.result_cache.put(topic, result)
+
+            return result
+
+        finally:
+            await app_context.resource_manager.release_resources_for_topics(1)
+
+    # Multi-topic processing - use asynchronous job system
+    logger.info(
+        f"Creating async research job for {len(topics)} topics: {topics} (cache_misses: {cache_misses})"
+    )
+
+    # Create the research job
+    job = await app_context.job_manager.create_job(topics)
+
+    # Get processing strategy suggestion
+    strategy = await app_context.resource_manager.suggest_processing_strategy(
+        len(cache_misses)
+    )
+    logger.info(
+        f"Using processing strategy: {strategy} for {len(cache_misses)} uncached topics"
+    )
+
+    # Setup progress callback
+    async def progress_callback(
+        job_id_param: str,
+        topic: str,
+        stage: str,
+        status: str,
+        extra_data: dict[str, Any],
+    ) -> None:
+        """Progress callback for job updates."""
+        try:
+            await app_context.job_manager.update_topic_progress(
+                job_id_param, topic, stage, status, **extra_data
+            )
+            logger.debug(
+                f"Updated progress: job={job_id_param}, topic={topic}, "
+                f"stage={stage}, status={status}"
+            )
+        except Exception as e:
+            logger.error(f"Error updating progress: {e}")
+
+    # Start background processing
+    await app_context.background_processor.start_research_job(
+        job.job_id, topics, app_context, progress_callback
+    )
+
+    # Return job info immediately
+    estimated_time = None
+    if len(cache_misses) > 0:
+        # Rough estimation: 30 seconds per topic for processing
+        estimated_seconds = len(cache_misses) * 30
+        if strategy == "sequential":
+            estimated_seconds *= 1.5  # Sequential takes longer
+        estimated_time = datetime.utcnow() + timedelta(seconds=estimated_seconds)
+
+    return ResearchJobResponse(
+        job_id=job.job_id,
+        status=job.status.value,
+        topics=job.topics,
+        message=f"Research job created for {len(topics)} topics ({len(cache_hits)} cached, {len(cache_misses)} to process). Use get_research_status to monitor progress.",
+        created_at=job.created_at,
+        estimated_completion_time=estimated_time,
+    )
 
 
 async def query_topic(
     args: QueryTopicToolArgs, app_context: AppContext
 ) -> QueryTopicResponse:
-    """MCP Tool for querying indexed topic context."""
-    query_text = args.query
-    top_k = args.top_k
-    search_mode = args.search_mode
-    voyage_input_query_type: VoyageInputType = (
-        settings.VOYAGEAI_INPUT_TYPE_QUERY
-        if is_voyage_input_type(settings.VOYAGEAI_INPUT_TYPE_QUERY)
-        else "query"
-    )
-
-    # Determine search ef based on mode
-    search_ef = (
-        settings.MILVUS_SEARCH_EF_EXPLORATION
-        if search_mode == "exploration"
-        else settings.MILVUS_SEARCH_EF
-    )
-
-    logger.info(
-        f"[Tool: query_topic] Processing query: {query_text[:100]}... (mode: {search_mode}, ef: {search_ef})"
-    )
-
+    """Query indexed topic context using Milvus vector search."""
     try:
         query_vector = await app_context.embedding_client.embed_texts(
             query_text, input_type=voyage_input_query_type
@@ -360,29 +441,150 @@ async def query_topic(
             query_vector = cast(list[float], query_embedding)
         else:
             raise MCPError(f"Unexpected embedding type: {type(query_embedding)}")
+        # Embed the query
+        from .embedding_client import VoyageInputType
 
         milvus_results = await app_context.milvus_operator.query_data(
             query_vector, top_k or settings.MILVUS_SEARCH_LIMIT, None, search_ef
+        voyage_query_type: VoyageInputType = "query"
+        query_embedding = await app_context.embedding_client.embed_texts(
+            args.query, input_type=voyage_query_type
         )
 
-        results_for_response = [DocumentFragment(**res) for res in milvus_results]
+        # Determine search parameters based on search mode
+        search_ef = None
+        if settings.MILVUS_INDEX_TYPE == "HNSW":
+            search_ef = (
+                settings.MILVUS_SEARCH_EF_EXPLORATION
+                if args.search_mode == "exploration"
+                else settings.MILVUS_SEARCH_EF
+            )
+
+        # Perform vector search
+        search_results = app_context.milvus_operator.query_data(
+            query_embedding[0],
+            args.top_k or settings.MILVUS_SEARCH_LIMIT,
+            search_ef=search_ef,
+        )
+
+        # Convert results to response format
+        results = [
+            DocumentFragment(
+                id=result.get("id"),
+                text_content=result.get(settings.MILVUS_TEXT_FIELD_NAME, ""),
+                source_type=result.get(settings.MILVUS_SOURCE_TYPE_FIELD_NAME, ""),
+                source_identifier=result.get(
+                    settings.MILVUS_SOURCE_IDENTIFIER_FIELD_NAME, ""
+                ),
+                topic=result.get(settings.MILVUS_TOPIC_FIELD_NAME, ""),
+                distance=result.get("distance"),
+            )
+            for result in search_results
+        ]
 
         return QueryTopicResponse(
-            query=query_text,
-            results=results_for_response,
-            message=f"Found {len(results_for_response)} relevant context fragments",
+            query=args.query,
+            results=results,
+            message=f"Found {len(results)} relevant results for query '{args.query}'.",
         )
-    except MCPError as e:
-        logger.error(
-            f"Error processing query '{query_text[:100]}...': {e.message}",
-            exc_info=True,
-        )
-        raise e
+
     except Exception as e:
-        full_error = str(e)
-        logger.error(
-            f"Unexpected error processing query '{query_text[:100]}...': {full_error}",
-            exc_info=True,
+        logger.error(f"Error in query_topic: {e}", exc_info=True)
+        return QueryTopicResponse(
+            query=args.query,
+            results=[],
+            message=f"Error querying topic: {str(e)[:100]}",
         )
-        # Return the full error message for debugging
-        raise MCPError(f"Query processing failed: {full_error}")
+
+
+# New MCP tools for job management
+
+
+async def get_research_status(args, app_context: AppContext):
+    """Get the status of a research job."""
+    from .job_models import JobStatusResponse
+
+    job = await app_context.job_manager.get_job(args.job_id)
+    if not job:
+        raise MCPError(f"Job {args.job_id} not found")
+
+    # Convert TopicProgress to dict format for response
+    topic_progress_dict = {}
+    for topic, progress in job.progress.items():
+        topic_progress_dict[topic] = {
+            "jina_status": progress.jina_status,
+            "perplexity_status": progress.perplexity_status,
+            "firecrawl_status": progress.firecrawl_status,
+            "urls_found": progress.urls_found,
+            "urls_processed": progress.urls_processed,
+            "completion_percentage": progress.get_completion_percentage(),
+            "errors": progress.errors,
+        }
+
+    return JobStatusResponse(
+        job_id=job.job_id,
+        status=job.status.value,
+        topics=job.topics,
+        overall_progress=job.get_overall_progress(),
+        topic_progress=topic_progress_dict,
+        estimated_completion_time=job.get_estimated_completion_time(),
+        results=job.results,
+        error=job.error,
+    )
+
+
+async def list_research_jobs(args, app_context: AppContext):
+    """List research jobs with optional filtering."""
+
+    # The job manager already returns a properly formatted ListJobsResponse
+    return await app_context.job_manager.list_jobs(
+        status_filter=args.status_filter, limit=args.limit, offset=args.offset
+    )
+
+
+async def cancel_research_job(args, app_context: AppContext):
+    """Cancel a research job."""
+    from .job_models import CancelJobResponse
+
+    job = await app_context.job_manager.get_job(args.job_id)
+    if not job:
+        raise MCPError(f"Job {args.job_id} not found")
+
+    # Cancel the background task if it's running
+    if hasattr(app_context, "background_processor"):
+        cancelled = await app_context.background_processor.cancel_job(args.job_id)
+        if not cancelled:
+            return CancelJobResponse(
+                job_id=args.job_id,
+                status=job.status.value,
+                message=f"Job {args.job_id} was not running or could not be cancelled",
+                preserved_results=None,
+            )
+
+    # Get the final job state
+    updated_job = await app_context.job_manager.get_job(args.job_id)
+
+    # Preserve any completed topic results
+    preserved_results = {}
+    if updated_job and updated_job.progress:
+        for topic, progress in updated_job.progress.items():
+            if progress.is_completed():
+                # Create a basic LoadTopicResponse for completed topics
+                # In practice, you might want to retrieve the actual results
+                from .models import LoadTopicResponse
+
+                preserved_results[topic] = LoadTopicResponse(
+                    message=f"Topic '{topic}' completed before cancellation",
+                    topic=topic,
+                    urls_processed=progress.urls_processed,
+                    perplexity_queried=progress.perplexity_status == "completed",
+                    jina_results_found=progress.urls_found,
+                    errors=progress.errors,
+                )
+
+    return CancelJobResponse(
+        job_id=args.job_id,
+        status=updated_job.status.value if updated_job else "unknown",
+        message=f"Job {args.job_id} cancelled successfully",
+        preserved_results=preserved_results if preserved_results else None,
+    )

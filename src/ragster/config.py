@@ -132,6 +132,12 @@ class Settings:
     JOB_CACHE_TTL_HOURS: int = int(os.getenv("JOB_CACHE_TTL_HOURS", 24))
     MAX_TOPICS_PER_JOB: int = int(os.getenv("MAX_TOPICS_PER_JOB", 10))
     MAX_STORED_JOBS: int = int(os.getenv("MAX_STORED_JOBS", 100))
+    MAX_CONCURRENT_TOPICS_PER_JOB: int = int(
+        os.getenv("MAX_CONCURRENT_TOPICS_PER_JOB", 3)
+    )
+    JOB_SHUTDOWN_TIMEOUT_SECONDS: int = int(
+        os.getenv("JOB_SHUTDOWN_TIMEOUT_SECONDS", 30)
+    )
 
     # Retry Configuration for Firecrawl
     FIRECRAWL_MAX_RETRIES: int = int(os.getenv("FIRECRAWL_MAX_RETRIES", 3))
