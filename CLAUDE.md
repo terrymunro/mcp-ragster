@@ -37,10 +37,10 @@ Ensure `EMBEDDING_DIMENSION` matches your `VOYAGEAI_MODEL_NAME` (config.py handl
 
 **Core Flow:**
 
-1. `load_topic_context` tool orchestrates data gathering from external APIs
+1. `research_topic` tool orchestrates data gathering from external APIs
 2. Concurrently fetches from Jina (search snippets), Perplexity (summary), and Firecrawl (full content)
 3. Content is embedded via Voyage AI and stored in Milvus vector database
-4. `query_topic_context` tool performs semantic search against stored embeddings
+4. `query_topic` tool performs semantic search against stored embeddings
 
 **Key Components:**
 

@@ -10,8 +10,8 @@ from .server import create_mcp_server
 from .tools import (
     LoadTopicToolArgs,
     QueryTopicToolArgs,
-    load_topic_context,
-    query_topic_context,
+    research_topic,
+    query_topic,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,19 +20,21 @@ mcp_server = create_mcp_server()
 
 
 @mcp_server.tool(
-    name="load_topic_context",
-    description="Loads information about a given topic from Jina, Firecrawl, and Perplexity, then indexes it into Milvus.",
+    name="research_topic",
+    description="Researches information about a given topic from Jina, Firecrawl, and Perplexity, then indexes it into Milvus.",
 )
-async def load_topic_tool(args: LoadTopicToolArgs, ctx: Context) -> LoadTopicResponse:
-    """MCP Tool to load and index topic context."""
+async def research_topic_tool(
+    args: LoadTopicToolArgs, ctx: Context
+) -> LoadTopicResponse:
+    """MCP Tool to research and index topic information."""
     app_ctx = ctx.request_context.lifespan_context
     if app_ctx is None:
         raise RuntimeError("Application context not available")
-    return await load_topic_context(args, app_ctx)
+    return await research_topic(args, app_ctx)
 
 
 @mcp_server.tool(
-    name="query_topic_context",
+    name="query_topic",
     description="Queries Milvus for context relevant to the given query string.",
 )
 async def query_topic_tool(
@@ -42,7 +44,7 @@ async def query_topic_tool(
     app_ctx = ctx.request_context.lifespan_context
     if app_ctx is None:
         raise RuntimeError("Application context not available")
-    return await query_topic_context(args, app_ctx)
+    return await query_topic(args, app_ctx)
 
 
 def main() -> None:

@@ -1,19 +1,10 @@
 """Pydantic models for request/response data structures."""
 
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-if __package__:
-    from .config import settings
-else:
-    import sys
-    from pathlib import Path
-
-    project_root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(project_root))
-    from ragster.config import settings
+from .config import settings
 
 
 class LoadTopicRequest(BaseModel):

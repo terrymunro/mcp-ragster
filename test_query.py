@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test script for query_topic_context functionality."""
+"""Test script for query_topic functionality."""
 
 import asyncio
 import logging
@@ -9,7 +9,7 @@ from pathlib import Path
 # Add the src directory to the path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from ragster.tools import QueryTopicToolArgs, query_topic_context
+from ragster.tools import QueryTopicToolArgs, query_topic
 from ragster.server import AppContext
 from ragster.config import settings
 from ragster.embedding_client import EmbeddingClient
@@ -66,7 +66,7 @@ async def test_query():
         )
 
         logger.info(f"Executing query: {query_args.query}")
-        result = await query_topic_context(query_args, app_context)
+        result = await query_topic(query_args, app_context)
 
         logger.info("Query result:")
         logger.info(f"  Query: {result.query}")

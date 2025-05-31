@@ -242,12 +242,12 @@ class TopicProcessor:
         )
 
 
-async def load_topic_context(
+async def research_topic(
     args: LoadTopicToolArgs, app_context: AppContext
 ) -> LoadTopicResponse:
-    """MCP Tool to load and index topic context."""
+    """MCP Tool for performing research and indexing that information for querying."""
     topic = args.topic
-    logger.info(f"[Tool: load_topic_context] Processing topic: {topic}")
+    logger.info(f"[Tool: research_topic] Processing topic: {topic}")
 
     processor = TopicProcessor(app_context)
     jina_results = await processor.process_jina_search(topic)
@@ -258,10 +258,10 @@ async def load_topic_context(
     return processor.build_response(topic)
 
 
-async def query_topic_context(
+async def query_topic(
     args: QueryTopicToolArgs, app_context: AppContext
 ) -> QueryTopicResponse:
-    """MCP Tool to query indexed topic context."""
+    """MCP Tool for querying indexed topic context."""
     query_text = args.query
     top_k = args.top_k
     search_mode = args.search_mode
@@ -279,7 +279,7 @@ async def query_topic_context(
     )
 
     logger.info(
-        f"[Tool: query_topic_context] Processing query: {query_text[:100]}... (mode: {search_mode}, ef: {search_ef})"
+        f"[Tool: query_topic] Processing query: {query_text[:100]}... (mode: {search_mode}, ef: {search_ef})"
     )
 
     try:

@@ -11,23 +11,23 @@ Combines multiple AI services to gather, process, and search contextual informat
 
 ## Features
 
-- **`load_topic_context` tool**: Researches a topic by gathering information from Jina (web search), Perplexity (AI summaries), and Firecrawl (full content)
-- **`query_topic_context` tool**: Search the gathered information using semantic similarity
+- **`research_topic` tool**: Researches a topic by gathering information from Jina (web search), Perplexity (AI summaries), and Firecrawl (full content)
+- **`query_topic` tool**: Search the gathered information using semantic similarity
 - **Automatic content processing**: Handles embedding and storage of all gathered content
 - **Robust error handling**: Gracefully handles API failures and network issues
 
 ## How It Works
 
-1. **Topic Loading**: Use `load_topic_context` with any topic to research and index information
+1. **Topic Loading**: Use `research_topic` with any topic to research and index information
 2. **Information Gathering**: Automatically searches the web, generates summaries, and crawls relevant content
 3. **Content Storage**: Embeds all content using Voyage AI and stores in Milvus vector database
-4. **Querying**: Use `query_topic_context` to search the indexed content with natural language queries
+4. **Querying**: Use `query_topic` to search the indexed content with natural language queries
 
 ### Load Topic Process Flow
 
 ```mermaid
 graph TD
-    A[User calls load_topic_context] --> B[Search topic with Jina AI]
+    A[User calls research_topic] --> B[Search topic with Jina AI]
     B --> C[Get search results & URLs]
     C --> D[Start concurrent operations]
     
@@ -90,7 +90,7 @@ uv run start-mcp-server
 
 ## MCP Tools
 
-### `load_topic_context`
+### `research_topic`
 
 Researches and indexes information about a topic.
 
@@ -122,7 +122,7 @@ Researches and indexes information about a topic.
 }
 ```
 
-### `query_topic_context`
+### `query_topic`
 
 Search the indexed information using natural language.
 
@@ -166,7 +166,7 @@ Search the indexed information using natural language.
 
    ```json
    {
-       "tool": "load_topic_context",
+       "tool": "research_topic",
        "arguments": {
            "topic": "Latest developments in renewable energy storage"
        }
@@ -177,7 +177,7 @@ Search the indexed information using natural language.
 
    ```json
    {
-       "tool": "query_topic_context", 
+       "tool": "query_topic", 
        "arguments": {
            "query": "What are the most promising battery technologies?",
            "top_k": 3
