@@ -37,22 +37,43 @@ Ensure `EMBEDDING_DIMENSION` matches your `VOYAGEAI_MODEL_NAME` (config.py handl
 
 **Core Flow:**
 
-1. `research_topic` tool orchestrates data gathering from external APIs
-2. Concurrently fetches from Jina (search snippets), Perplexity (summary), and Firecrawl (full content)
-3. Content is embedded via Voyage AI and stored in Milvus vector database
-4. `query_topic` tool performs semantic search against stored embeddings
+1. `research_topic` tool orchestrates data gathering from external APIs **asynchronously** for 1-10 topics per job
+2. Returns immediately with a job ID; background tasks handle topic research and indexing
+3. Use `get_research_status` to poll job progress and see per-topic status
+4. Use `list_research_jobs` to enumerate jobs, filter by status, and paginate
+5. Use `cancel_research_job` to stop a running job and preserve completed topic results
+6. Content is embedded via Voyage AI and stored in Milvus vector database
+7. `query_topic` tool performs semantic search against stored embeddings
 
 **Key Components:**
 
-- `main.py`: Entry point and MCP tool registration (50 lines)
+- `main.py`: Entry point and MCP tool registration (see new async job tools)
 - `server.py`: FastMCP server and lifespan management
-- `tools.py`: Tool implementations with composable functions
+- `tools.py`: Tool implementations, including async job management tools
+- `job_manager.py`: Thread-safe, async job management, state transitions, and job CRUD
+- `background_processor.py`: Async orchestration of multi-topic research jobs, cancellation, and progress callbacks
+- `job_models.py`: Data models for jobs, progress, responses, and arguments
 - `external_apis.py`: Clients for Jina, Firecrawl, and Perplexity APIs with connection pooling
 - `embedding_client.py`: Voyage AI embedding interface with LRU caching
 - `milvus_ops.py`: Vector database operations with connection pooling and health checks
 - `config.py`: Environment-based configuration with validation
 - `models.py`: Pydantic models for request/response data structures
 - `exceptions.py`: Custom exception hierarchy
+
+**Async Job Management Tools:**
+
+- `research_topic`: Start a new async research job (1-10 topics)
+- `get_research_status`: Poll for job status and per-topic progress
+- `list_research_jobs`: List jobs, filter by status, paginate
+- `cancel_research_job`: Cancel a running job, preserve completed results
+
+**Async Workflow Example:**
+
+1. Start a job with `research_topic` (returns job_id)
+2. Poll with `get_research_status` until status is `completed` or `failed`
+3. Use `list_research_jobs` to monitor all jobs
+4. Use `cancel_research_job` to stop a job if needed
+5. Query results with `query_topic` after job completion
 
 **Performance Optimizations:**
 

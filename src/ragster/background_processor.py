@@ -44,9 +44,14 @@ class BackgroundTaskProcessor:
         task.add_done_callback(lambda t: self._cleanup_task(job_id))
 
     async def cancel_job(self, job_id: str) -> bool:
-        """Cancel a running job."""
+        """Cancel a running job. Idempotent: returns True if already cancelled."""
         if job_id not in self._active_tasks:
             return False
+
+        # Check if job is already cancelled
+        job = await self.job_manager.get_job(job_id)
+        if job and job.status == JobStatus.CANCELLED:
+            return True
 
         task = self._active_tasks[job_id]
         if not task.done():
@@ -60,7 +65,7 @@ class BackgroundTaskProcessor:
 
             # Update job status
             job = await self.job_manager.get_job(job_id)
-            if job:
+            if job and job.status != JobStatus.CANCELLED:
                 await self.job_manager.update_job_status(job_id, JobStatus.CANCELLED)
 
         return True
@@ -138,12 +143,29 @@ class BackgroundTaskProcessor:
                     job_id, topics, app_context, progress_callback
                 )
 
-            # Mark job as completed
-            await self.job_manager.update_job_status(job_id, JobStatus.COMPLETED)
-
-            # Job completion timestamp is handled by update_job_status
-
-            logger.info(f"Research job {job_id} completed successfully")
+            # After processing, check if any topic failed
+            job = await self.job_manager.get_job(job_id)
+            any_failed = any(
+                progress.has_errors() for progress in job.progress.values()
+            )
+            if any_failed:
+                # Gather all errors from topic progress
+                all_errors = []
+                for progress in job.progress.values():
+                    all_errors.extend(progress.errors)
+                error_summary = (
+                    "; ".join(all_errors)
+                    if all_errors
+                    else "One or more topics failed."
+                )
+                await self.job_manager.update_job_status(
+                    job_id, JobStatus.FAILED, error=error_summary
+                )
+                logger.info(f"Research job {job_id} failed due to topic errors")
+            else:
+                # Mark job as completed
+                await self.job_manager.update_job_status(job_id, JobStatus.COMPLETED)
+                logger.info(f"Research job {job_id} completed successfully")
 
         except asyncio.CancelledError:
             logger.info(f"Research job {job_id} was cancelled")
@@ -154,8 +176,6 @@ class BackgroundTaskProcessor:
             await self.job_manager.update_job_status(
                 job_id, JobStatus.FAILED, error=str(e)
             )
-
-            # Error is already stored by update_job_status
 
     async def _process_topics_sequential(
         self,
@@ -204,7 +224,11 @@ class BackgroundTaskProcessor:
 
             except Exception as e:
                 logger.error(f"Error processing topic '{topic}': {e}", exc_info=True)
-                # Update topic progress with error
+                # Update topic progress with error (always record in job progress)
+                await self.job_manager.update_topic_progress(
+                    job_id, topic, "all", "failed", error=str(e)
+                )
+                # Also call progress_callback if provided
                 if progress_callback:
                     await progress_callback(
                         job_id, topic, "all", "failed", {"error": str(e)}

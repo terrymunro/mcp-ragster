@@ -1,10 +1,10 @@
 """Main entry point for the MCP RAG Context Server."""
 
 import logging
-from .config import settings
 
 from mcp.server.fastmcp import Context
 
+from .config import settings
 from .models import LoadTopicResponse, QueryTopicResponse
 from .job_models import (
     GetJobStatusArgs,

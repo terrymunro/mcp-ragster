@@ -1,6 +1,6 @@
 """Job management data models for asynchronous research operations."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any, Optional
 from dataclasses import dataclass, field
@@ -123,11 +123,11 @@ class ResearchJob:
         if progress <= 0.0:
             return None
 
-        elapsed = (datetime.utcnow() - self.started_at).total_seconds()
+        elapsed = (datetime.now(UTC) - self.started_at).total_seconds()
         estimated_total_time = elapsed / progress
         remaining_time = estimated_total_time - elapsed
 
-        return datetime.utcnow() + timedelta(seconds=remaining_time)
+        return datetime.now(UTC) + timedelta(seconds=remaining_time)
 
     def get_completed_topics(self) -> list[str]:
         """Get list of topics that have completed successfully."""

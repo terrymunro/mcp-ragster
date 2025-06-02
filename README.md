@@ -92,73 +92,205 @@ uv run start-mcp-server
 
 ### `research_topic`
 
-Researches and indexes information about a topic.
+Researches and indexes information about one or more topics **asynchronously**. Returns immediately with a job ID for tracking progress.
 
 **Input:**
 
 ```json
 {
-    "topic": "Quantum Computing Error Correction"
+    "topics": ["Quantum Computing Error Correction", "AI in Healthcare"]
 }
 ```
 
-**What it does:**
-
-- Searches the web using Jina AI to find relevant URLs and snippets
-- Gets an AI-generated summary from Perplexity AI
-- Crawls the found URLs using Firecrawl to get full content
-- Embeds all content using Voyage AI and stores in Milvus
+- Supports 1-10 topics per job
+- Returns a job ID and estimated completion time
+- Use job management tools below to monitor and control jobs
 
 **Output:**
 
 ```json
 {
-    "message": "Topic 'Quantum Computing Error Correction' processing initiated. All operations initiated successfully.",
-    "topic": "Quantum Computing Error Correction",
-    "urls_processed": 3,
-    "perplexity_queried": true,
-    "jina_results_found": 5,
-    "errors": []
+    "job_id": "b1c2d3e4-...",
+    "status": "pending",
+    "topics": ["Quantum Computing Error Correction", "AI in Healthcare"],
+    "message": "Research job created for 2 topics (0 cached, 2 to process). Use get_research_status to monitor progress.",
+    "created_at": "2024-06-10T12:34:56Z",
+    "estimated_completion_time": "2024-06-10T12:35:56Z"
 }
 ```
 
-### `query_topic`
+### `get_research_status`
 
-Search the indexed information using natural language.
+Get the status and progress of a research job.
 
 **Input:**
 
 ```json
 {
-    "query": "What are the main challenges in quantum error correction?",
-    "top_k": 5
+    "job_id": "b1c2d3e4-..."
 }
 ```
-
-**What it does:**
-
-- Embeds your query using Voyage AI
-- Searches the Milvus vector database for semantically similar content
-- Returns the most relevant text fragments with source information
 
 **Output:**
 
 ```json
 {
-    "query": "What are the main challenges in quantum error correction?",
-    "results": [
+    "job_id": "b1c2d3e4-...",
+    "status": "running",
+    "topics": ["Quantum Computing Error Correction", "AI in Healthcare"],
+    "overall_progress": 0.67,
+    "topic_progress": {
+        "Quantum Computing Error Correction": {
+            "jina_status": "completed",
+            "perplexity_status": "completed",
+            "firecrawl_status": "running",
+            "urls_found": 5,
+            "urls_processed": 3,
+            "completion_percentage": 0.67,
+            "errors": []
+        },
+        "AI in Healthcare": {
+            "jina_status": "completed",
+            "perplexity_status": "running",
+            "firecrawl_status": "pending",
+            "urls_found": 4,
+            "urls_processed": 0,
+            "completion_percentage": 0.33,
+            "errors": []
+        }
+    },
+    "estimated_completion_time": "2024-06-10T12:36:30Z",
+    "results": null,
+    "error": null
+}
+```
+
+### `list_research_jobs`
+
+List all research jobs, with optional status filtering and pagination.
+
+**Input:**
+
+```json
+{
+    "status_filter": "running",
+    "limit": 5,
+    "offset": 0
+}
+```
+
+**Output:**
+
+```json
+{
+    "jobs": [
         {
-            "id": "450123...",
-            "text_content": "Decoherence remains a major hurdle in quantum error correction...",
-            "source_type": "firecrawl",
-            "source_identifier": "https://example.com/quantum-challenges",
-            "topic": "Quantum Computing Error Correction",
-            "distance": 0.23
+            "job_id": "b1c2d3e4-...",
+            "status": "running",
+            "topics": ["Quantum Computing Error Correction", "AI in Healthcare"],
+            "overall_progress": 0.67,
+            "topic_progress": { ... },
+            "estimated_completion_time": "2024-06-10T12:36:30Z",
+            "results": null,
+            "error": null
         }
     ],
-    "message": "Found 5 relevant documents."
+    "total_count": 1,
+    "has_more": false
 }
 ```
+
+### `cancel_research_job`
+
+Cancel a running research job. Any completed topic results are preserved.
+
+**Input:**
+
+```json
+{
+    "job_id": "b1c2d3e4-..."
+}
+```
+
+**Output:**
+
+```json
+{
+    "job_id": "b1c2d3e4-...",
+    "status": "cancelled",
+    "message": "Job b1c2d3e4-... cancelled successfully",
+    "preserved_results": {
+        "Quantum Computing Error Correction": {
+            "message": "Topic 'Quantum Computing Error Correction' completed before cancellation",
+            "topic": "Quantum Computing Error Correction",
+            "urls_processed": 3,
+            "perplexity_queried": true,
+            "jina_results_found": 5,
+            "errors": []
+        }
+    }
+}
+```
+
+## Example Async Workflow
+
+1. **Start a multi-topic research job:**
+
+   ```json
+   {
+       "tool": "research_topic",
+       "arguments": {
+           "topics": ["AI in Healthcare", "Quantum Computing Error Correction"]
+       }
+   }
+   ```
+
+2. **Poll for job status:**
+
+   ```json
+   {
+       "tool": "get_research_status",
+       "arguments": {
+           "job_id": "b1c2d3e4-..."
+       }
+   }
+   ```
+
+3. **List all jobs:**
+
+   ```json
+   {
+       "tool": "list_research_jobs",
+       "arguments": {
+           "status_filter": "running",
+           "limit": 10,
+           "offset": 0
+       }
+   }
+   ```
+
+4. **Cancel a job if needed:**
+
+   ```json
+   {
+       "tool": "cancel_research_job",
+       "arguments": {
+           "job_id": "b1c2d3e4-..."
+       }
+   }
+   ```
+
+5. **Query results after completion:**
+
+   ```json
+   {
+       "tool": "query_topic",
+       "arguments": {
+           "query": "What are the main challenges in quantum error correction?",
+           "top_k": 5
+       }
+   }
+   ```
 
 ## Example Workflow
 

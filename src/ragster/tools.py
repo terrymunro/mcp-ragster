@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Optional
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import settings
@@ -331,7 +331,7 @@ async def research_topic(args: LoadTopicToolArgs, app_context: AppContext):
             status="pending",
             topics=topics,
             message=f"Job queued due to concurrency limit. {active_jobs} jobs currently active.",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             estimated_completion_time=None,
         )
 
@@ -351,8 +351,6 @@ async def research_topic(args: LoadTopicToolArgs, app_context: AppContext):
             await processor.process_concurrent_tasks(topic, jina_results)
 
             result = processor.build_response(topic)
-
-            # Cache the result
             await app_context.result_cache.put(topic, result)
 
             return result
@@ -408,7 +406,7 @@ async def research_topic(args: LoadTopicToolArgs, app_context: AppContext):
         estimated_seconds = len(cache_misses) * 30
         if strategy == "sequential":
             estimated_seconds *= 1.5  # Sequential takes longer
-        estimated_time = datetime.utcnow() + timedelta(seconds=estimated_seconds)
+        estimated_time = datetime.now(UTC) + timedelta(seconds=estimated_seconds)
 
     return ResearchJobResponse(
         job_id=job.job_id,
