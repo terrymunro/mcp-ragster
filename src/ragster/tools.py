@@ -422,14 +422,15 @@ async def query_topic(
     args: QueryTopicToolArgs, app_context: AppContext
 ) -> QueryTopicResponse:
     """Query indexed topic context using Milvus vector search."""
-    from .embedding_client import VoyageInputType
 
     try:
-        # Embed the query once
+        # Embed the query so we can search Milvus with its vector representation
         voyage_query_type: VoyageInputType = "query"
         query_embedding = await app_context.embedding_client.embed_texts(
             args.query, input_type=voyage_query_type
         )
+        if not query_embedding or not query_embedding[0]:
+            raise MCPError("Embedding service returned no data for query")
         query_vector = cast(list[float], query_embedding[0])
 
         # Determine search parameters based on search mode
