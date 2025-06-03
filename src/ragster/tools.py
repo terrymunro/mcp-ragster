@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional, cast
 from datetime import UTC, datetime, timedelta
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -422,32 +422,15 @@ async def query_topic(
     args: QueryTopicToolArgs, app_context: AppContext
 ) -> QueryTopicResponse:
     """Query indexed topic context using Milvus vector search."""
-    try:
-        query_vector = await app_context.embedding_client.embed_texts(
-            query_text, input_type=voyage_input_query_type
-        )
-        # Ensure we have a single vector for querying
-        if (
-            isinstance(query_embedding, list)
-            and len(query_embedding) > 0
-            and isinstance(query_embedding[0], list)
-        ):
-            query_vector = cast(list[float], query_embedding[0])
-        elif isinstance(query_embedding, list) and all(
-            isinstance(x, float) for x in query_embedding
-        ):
-            query_vector = cast(list[float], query_embedding)
-        else:
-            raise MCPError(f"Unexpected embedding type: {type(query_embedding)}")
-        # Embed the query
-        from .embedding_client import VoyageInputType
+    from .embedding_client import VoyageInputType
 
-        milvus_results = await app_context.milvus_operator.query_data(
-            query_vector, top_k or settings.MILVUS_SEARCH_LIMIT, None, search_ef
+    try:
+        # Embed the query once
         voyage_query_type: VoyageInputType = "query"
         query_embedding = await app_context.embedding_client.embed_texts(
             args.query, input_type=voyage_query_type
         )
+        query_vector = cast(list[float], query_embedding[0])
 
         # Determine search parameters based on search mode
         search_ef = None
@@ -460,7 +443,7 @@ async def query_topic(
 
         # Perform vector search
         search_results = app_context.milvus_operator.query_data(
-            query_embedding[0],
+            query_vector,
             args.top_k or settings.MILVUS_SEARCH_LIMIT,
             search_ef=search_ef,
         )
@@ -468,16 +451,16 @@ async def query_topic(
         # Convert results to response format
         results = [
             DocumentFragment(
-                id=result.get("id"),
-                text_content=result.get(settings.MILVUS_TEXT_FIELD_NAME, ""),
-                source_type=result.get(settings.MILVUS_SOURCE_TYPE_FIELD_NAME, ""),
-                source_identifier=result.get(
+                id=res.get("id"),
+                text_content=res.get(settings.MILVUS_TEXT_FIELD_NAME, ""),
+                source_type=res.get(settings.MILVUS_SOURCE_TYPE_FIELD_NAME, ""),
+                source_identifier=res.get(
                     settings.MILVUS_SOURCE_IDENTIFIER_FIELD_NAME, ""
                 ),
-                topic=result.get(settings.MILVUS_TOPIC_FIELD_NAME, ""),
-                distance=result.get("distance"),
+                topic=res.get(settings.MILVUS_TOPIC_FIELD_NAME, ""),
+                distance=res.get("distance"),
             )
-            for result in search_results
+            for res in search_results
         ]
 
         return QueryTopicResponse(
